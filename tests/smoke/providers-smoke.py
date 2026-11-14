@@ -12,7 +12,7 @@ parser.add_argument('--url', default='http://127.0.0.1:18096')
 args = parser.parse_args()
 state = json.loads(pathlib.Path('.test-state/session.secret').read_text())
 viewer = state['users']['viewer']['token']
-config_path = '/Plugins/a74fdb2e-938f-483b-b2ef-f527e14ff724/Configuration'
+config_path = '/Plugins/06423df8-a0cd-4ab9-a450-febb5ecb9133/Configuration'
 
 
 def request(path, token=viewer, data=None):

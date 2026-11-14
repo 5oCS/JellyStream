@@ -5,14 +5,14 @@ import xml.etree.ElementTree as ET
 
 root = pathlib.Path(__file__).resolve().parents[1]
 output = root / 'artifacts/plugin'
-DESCRIPTION = 'Anime, movies and TV from online sources, as Jellyfin channels.'
-OVERVIEW = 'Stream instead of storing: browse Anime and Movies & TV, play in Jellyfin\'s own player.'
+DESCRIPTION = 'Anime, movies, TV, music, audiobooks and podcasts from online sources, as Jellyfin channels.'
+OVERVIEW = 'Stream instead of storing: browse Anime, Movies & TV, Music, Audiobooks and Podcasts, play in Jellyfin\'s own player.'
 TARGET_ABI = '12.3.0.0'
 version = ET.parse(root / 'src/Jellystream.csproj').findtext('.//Version')
 manifest = {
-    'guid': 'a74fdb2e-938f-483b-b2ef-f527e14ff724',
+    'guid': '06423df8-a0cd-4ab9-a450-febb5ecb9133',
     'name': 'Jellystream', 'description': DESCRIPTION, 'overview': OVERVIEW,
-    'owner': 'mmrmagno', 'category': 'Channels', 'version': version, 'targetAbi': TARGET_ABI,
+    'owner': '5oCS', 'category': 'Channels', 'version': version, 'targetAbi': TARGET_ABI,
     'imagePath': 'jellystream.png', 'status': 'Active', 'autoUpdate': True,
 }
 (output / 'meta.json').write_text(json.dumps(manifest, indent=2) + '\n')

@@ -25,7 +25,7 @@ public sealed class MusicChannel(MusicCatalog catalog, MusicAudio sources, Music
     public string Name => ChannelName;
     public string Description => "Jellystream · Browse the charts or search artists and albums, and stream them in lossless FLAC.";
     public string DataVersion => "streamfin-music-2-" + MusicCatalog.Fallback + "-" + IsAvailable + "-" + (Plugin.Instance?.Configuration.CacheRevision ?? 0);
-    public string HomePageUrl => "https://github.com/mmrmagno/jellyfin-plugin-streamfin";
+    public string HomePageUrl => "https://github.com/5oCS/JellyStream";
     public ChannelParentalRating ParentalRating => ChannelParentalRating.GeneralAudience;
     public bool IsEnabledFor(string userId) => IsAvailable && Guid.TryParse(userId, out var id) && Plugin.Allows(id);
     // The play count is part of the key so Recently played does not wait for the catalog cache to expire.

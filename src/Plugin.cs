@@ -78,7 +78,7 @@ public sealed class Configuration : BasePluginConfiguration
 public sealed class Plugin : BasePlugin<Configuration>, IHasWebPages
 {
     public static Plugin? Instance { get; private set; }
-    public static readonly Guid PluginId = new("a74fdb2e-938f-483b-b2ef-f527e14ff724");
+    public static readonly Guid PluginId = new("06423df8-a0cd-4ab9-a450-febb5ecb9133");
     public Plugin(IApplicationPaths paths, IXmlSerializer serializer) : base(paths, serializer) => Instance = this;
     public override Guid Id => PluginId;
     public override string Name => "Jellystream";

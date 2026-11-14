@@ -18,7 +18,7 @@ parser.add_argument('--state', default='.test-state/session.secret')
 parser.add_argument('--music', default='/music', help='a folder inside the server that Jellyfin can write to')
 args = parser.parse_args()
 state = json.loads(pathlib.Path(args.state).read_text())
-config_path = '/Plugins/a74fdb2e-938f-483b-b2ef-f527e14ff724/Configuration'
+config_path = '/Plugins/06423df8-a0cd-4ab9-a450-febb5ecb9133/Configuration'
 REST = args.url + '/StreamFin/rest/'
 
 

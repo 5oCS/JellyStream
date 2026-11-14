@@ -2,8 +2,12 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import pathlib
 import zipfile
+
+# The banner is served from this repository's own main branch, not the fork it was made from.
+repository = os.environ.get('GITHUB_REPOSITORY', '5oCS/JellyStream')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--manifest', type=pathlib.Path, required=True)
@@ -23,7 +27,7 @@ if plugin is None:
 plugin.update(
     name=meta['name'], description=meta['description'], overview=meta['overview'],
     owner=meta['owner'], category=meta['category'],
-    imageUrl='https://raw.githubusercontent.com/mmrmagno/jellyfin-plugin-streamfin/main/assets/banner.png',
+    imageUrl=f'https://raw.githubusercontent.com/{repository}/main/assets/banner.png',
 )
 plugin['versions'] = [v for v in plugin['versions'] if v['version'] != meta['version']]
 plugin['versions'].insert(0, {

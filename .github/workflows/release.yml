@@ -49,9 +49,16 @@ jobs:
           notes=$(git tag -l --format='%(contents:body)' "$TAG")
           [ -n "$notes" ] || notes=$(git tag -l --format='%(contents:subject)' "$TAG")
           printf '%s\n' "$notes" > "$RUNNER_TEMP/notes.txt"
-          if gh release view "$TAG" >/dev/null 2>&1; then previous=$TAG; else previous=$(gh release view --json tagName --jq .tagName); fi
-          gh release download "$previous" -p manifest.json -D "$RUNNER_TEMP/previous"
-          cp "$RUNNER_TEMP/previous/manifest.json" artifacts/manifest.json
+          # The first release has no manifest.json to continue from, so start from an empty list.
+          previous=''
+          if gh release view "$TAG" >/dev/null 2>&1; then previous="$TAG"
+          else previous=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          fi
+          if [ -n "$previous" ] && gh release download "$previous" -p manifest.json -D "$RUNNER_TEMP/previous" 2>/dev/null; then
+            cp "$RUNNER_TEMP/previous/manifest.json" artifacts/manifest.json
+          else
+            echo '[]' > artifacts/manifest.json
+          fi
           python3 scripts/manifest.py --manifest artifacts/manifest.json --zip "artifacts/Jellystream-$VERSION.zip" \
             --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Jellystream-$VERSION.zip" \
             --changelog "$(cat "$RUNNER_TEMP/notes.txt")"

@@ -25,7 +25,7 @@ public sealed class AnimeChannel(AniListCatalog catalog, SourceRegistry sources,
     public string Name => "Anime";
     public string Description => "Jellystream · Browse anime and stream Japanese audio with English subtitles.";
     public string DataVersion => "jellystream-6-" + SourceRegistry.CacheKey + "-" + AniListCatalog.PolicyKey + "-" + (Plugin.Instance?.Configuration.CacheRevision ?? 0);
-    public string HomePageUrl => "https://github.com/mmrmagno/jellyfin-plugin-streamfin";
+    public string HomePageUrl => "https://github.com/5oCS/JellyStream";
     public ChannelParentalRating ParentalRating => ChannelParentalRating.GeneralAudience;
     public bool IsEnabledFor(string userId) => Guid.TryParse(userId, out var id) && Plugin.Allows(id);
     // A site going down or coming back changes what a title lists, so its cached listings are made again.

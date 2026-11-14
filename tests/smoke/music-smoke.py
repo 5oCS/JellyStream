@@ -13,7 +13,7 @@ parser.add_argument('--url', default='http://127.0.0.1:18096')
 parser.add_argument('--state', default='.test-state/session.secret')
 args = parser.parse_args()
 state = json.loads(pathlib.Path(args.state).read_text())
-config_path = '/Plugins/a74fdb2e-938f-483b-b2ef-f527e14ff724/Configuration'
+config_path = '/Plugins/06423df8-a0cd-4ab9-a450-febb5ecb9133/Configuration'
 CATALOG = 'https://tracks.monochrome.st/track/'
 
 

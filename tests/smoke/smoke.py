@@ -8,7 +8,7 @@ import time
 import urllib.error
 import urllib.request
 
-PLUGIN = 'a74fdb2e-938f-483b-b2ef-f527e14ff724'
+PLUGIN = '06423df8-a0cd-4ab9-a450-febb5ecb9133'
 parser = argparse.ArgumentParser()
 parser.add_argument('--url', required=True)
 parser.add_argument('--bootstrap', action='store_true')

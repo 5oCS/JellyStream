@@ -57,7 +57,7 @@ if not args.verify_after_restart:
     print('PASS: clearing requires an administrator', flush=True)
     assert ok(clear_path, state['admin'], {})['ClearedCount'] > 0
     assert ok(clear_path, state['admin'], {})['ClearedCount'] == 0
-    config_path = '/Plugins/a74fdb2e-938f-483b-b2ef-f527e14ff724/Configuration'
+    config_path = '/Plugins/06423df8-a0cd-4ab9-a450-febb5ecb9133/Configuration'
     config = ok(config_path, state['admin'])
     config['CacheRevision'] += 1
     ok(config_path, state['admin'], config)

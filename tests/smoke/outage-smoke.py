@@ -28,7 +28,7 @@ parser.add_argument('--youtube', action='store_true')
 args = parser.parse_args()
 state = json.loads(pathlib.Path(args.state).read_text())
 memo_path = pathlib.Path(args.memo)
-config_path = '/Plugins/a74fdb2e-938f-483b-b2ef-f527e14ff724/Configuration'
+config_path = '/Plugins/06423df8-a0cd-4ab9-a450-febb5ecb9133/Configuration'
 REST = args.url + '/StreamFin/rest/'
 
 

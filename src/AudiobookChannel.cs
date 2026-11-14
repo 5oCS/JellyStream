@@ -27,7 +27,7 @@ public sealed class AudiobookChannel(LibriVoxCatalog books, InternetArchiveCatal
     public string Name => ChannelName;
     public string Description => "Jellystream · Listen to free audiobooks from LibriVox and the Internet Archive.";
     public string DataVersion => "jellystream-audiobook-1-" + IsAvailable + "-" + (Plugin.Instance?.Configuration.CacheRevision ?? 0);
-    public string HomePageUrl => "https://github.com/mmrmagno/jellyfin-plugin-streamfin";
+    public string HomePageUrl => "https://github.com/5oCS/JellyStream";
     public ChannelParentalRating ParentalRating => ChannelParentalRating.GeneralAudience;
     public bool IsEnabledFor(string userId) => IsAvailable && Guid.TryParse(userId, out var id) && Plugin.Allows(id);
     public string GetCacheKey(string? userId) => $"{userId}-{DateTime.UtcNow.Ticks / TimeSpan.FromMinutes(Math.Clamp(Plugin.Instance?.Configuration.MetadataCacheMinutes ?? 60, 1, 1440)).Ticks}";
