@@ -25,8 +25,19 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
     private static readonly Regex TrackBlock = Rx(@"\{[^{}]*?\.(?:vtt|srt)[^{}]*?\}");
     private static readonly Regex TrackFile = Rx(@"[""']?file[""']?\s*:\s*[""'](https?://[^""']+?\.(?:vtt|srt)(?:\?[^""']*)?)[""']");
     private static readonly Regex TrackLabel = Rx(@"[""']?label[""']?\s*:\s*[""']([^""']+)[""']");
-    private static readonly Regex Iframe = Rx(@"<iframe[^>]+src\s*=\s*[""'](https?://[^""']+)[""']");
+    // Player hand-off. A whole iframe tag is taken first, then every link attribute inside it, because
+    // a tag may carry a useless src="about:blank" alongside the real data-src/data-api/data-url that a
+    // single pattern over the tag would stop at. Values may be protocol-relative (//host/path), so no
+    // scheme is required and Http() decides whether the value resolves to a fetchable page.
+    private static readonly Regex Frame = Rx(@"<iframe\b[^>]*>");
+    private static readonly Regex FrameLink = Rx(@"(?:\bsrc|data-src|data-api|data-url)\s*=\s*[""']([^""']+)[""']");
+    // Some sites answer a hop with a bare JSON body naming the next page instead of an iframe.
+    private static readonly Regex JsonHop = Rx(@"""(?:src|url|file)""\s*:\s*""([^""]+)""");
     private static readonly Regex Packed = Rx(@"}\s*\(\s*'(.*?)'\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*'(.*?)'\.split\('\|'\)");
+
+    // Player chains now run four or five pages deep, so the walk follows further than the two hops a
+    // static FlixHQ page needed; the fan-out narrows at depth to keep a deeply nested page cheap.
+    private const int MaxDepth = 5;
 
     public async Task<IReadOnlyList<ResolvedVideo>> ResolveAsync(Film film, int? season, int? episode, CancellationToken ct)
     {
@@ -194,8 +205,12 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
     private static Dictionary<string, string> Referer(Uri page) => new() { ["Referer"] = page.AbsoluteUri };
 
 
-    public async Task<ResolvedVideo?> PlayerAsync(Uri embed, Uri referer, int depth, CancellationToken ct)
+    public Task<ResolvedVideo?> PlayerAsync(Uri embed, Uri referer, int depth, CancellationToken ct) =>
+        PlayerAsync(embed, referer, depth, [], ct);
+
+    private async Task<ResolvedVideo?> PlayerAsync(Uri embed, Uri referer, int depth, HashSet<Uri> seen, CancellationToken ct)
     {
+        if (!seen.Add(embed)) return null;
         var (final, html) = await http.PageAsync(embed, ct, headers: Referer(referer), open: true);
         if (FindMedia(html) is { } media)
         {
@@ -206,13 +221,32 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
                 throw new ProviderException("The player did not return an HLS playlist.");
             return new ResolvedVideo(media, hls ? "HLS" : "MP4", headers, false, hls, FindSubtitles(html));
         }
-        if (depth >= 2) return null;
-        foreach (var frame in Iframe.Matches(html).Select(m => Http(final, m.Groups[1].Value)).OfType<Uri>().Distinct().Take(4))
+        if (depth >= MaxDepth) return null;
+        foreach (var frame in Hops(final, html).Distinct().Take(depth < 2 ? 4 : 2))
         {
-            try { if (await PlayerAsync(frame, final, depth + 1, ct) is { } found) return found; }
+            try { if (await PlayerAsync(frame, final, depth + 1, seen, ct) is { } found) return found; }
             catch (Exception ex) when (ex is ProviderException or HttpRequestException or System.Text.RegularExpressions.RegexMatchTimeoutException or UriFormatException && !ct.IsCancellationRequested) { }
         }
         return null;
+    }
+
+    // The next page a player points at: whatever the iframes link (however they spell the attribute)
+    // plus, for a bare JSON body, the src/url/file it names. HTML entities are decoded first because
+    // an attribute keeps its query separators escaped (&amp;).
+    public static IEnumerable<Uri> Hops(Uri page, string html)
+    {
+        foreach (Match frame in Frame.Matches(html))
+            foreach (Match link in FrameLink.Matches(frame.Value))
+                if (Http(page, WebUtility.HtmlDecode(link.Groups[1].Value)) is { } hop) yield return hop;
+        if (!IsJson(html)) yield break;
+        foreach (Match m in JsonHop.Matches(html))
+            if (Http(page, WebUtility.HtmlDecode(m.Groups[1].Value)) is { } hop) yield return hop;
+    }
+    private static bool IsJson(string html)
+    {
+        foreach (var c in html)
+            if (!char.IsWhiteSpace(c)) return c is '{' or '[';
+        return false;
     }
 
     public static Uri? FindMedia(string html)

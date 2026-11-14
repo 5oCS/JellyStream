@@ -27,17 +27,14 @@ public sealed class EmbedSources(FlixSource flix)
     [
         new("vidfast", "VidFast", "https://vidfast.pro/movie/{0}?autoPlay=true", "https://vidfast.pro/tv/{0}/{1}/{2}?autoPlay=true"),
         new("vidlink", "VidLink", "https://vidlink.pro/movie/{0}", "https://vidlink.pro/tv/{0}/{1}/{2}"),
-        new("vidsrc-pm", "vidsrc.pm", "https://vidsrc.pm/embed/movie/{0}", "https://vidsrc.pm/embed/tv/{0}/{1}/{2}"),
         new("2embed-skin", "2embed.skin", "https://www.2embed.skin/embed/{0}", "https://www.2embed.skin/embedtv/{0}&s={1}&e={2}"),
         new("vidsrc-to", "vidsrc.to", "https://vidsrc.to/embed/movie/{0}", "https://vidsrc.to/embed/tv/{0}/{1}/{2}"),
-        new("vidsrc-cc", "vidsrc.cc", "https://vidsrc.cc/v2/embed/movie/{0}", "https://vidsrc.cc/v2/embed/tv/{0}/{1}/{2}"),
         new("2embed-cc", "2embed.cc", "https://www.2embed.cc/embed/{0}", "https://www.2embed.cc/embedtv/{0}&s={1}&e={2}"),
         new("nontongo", "nontongo.win", "https://www.nontongo.win/embed/movie/{0}", "https://www.nontongo.win/embed/tv/{0}/{1}/{2}"),
         new("autoembed-co", "autoembed.co", "https://autoembed.co/movie/tmdb/{0}", "https://autoembed.co/tv/tmdb/{0}-{1}-{2}"),
         new("moviesapi-to", "moviesapi.to", "https://moviesapi.to/movie/{0}", "https://moviesapi.to/tv/{0}-{1}-{2}"),
         new("smashystream", "smashystream", "https://player.smashystream.com/playere.php?tmdb={0}",
-            "https://player.smashystream.com/playere.php?tmdb={0}&season={1}&episode={2}"),
-        new("frembed", "frembed", "https://frembed.icu/api/film.php?id={0}", "https://frembed.icu/api/serie.php?id={0}&sa={1}&epi={2}")
+            "https://player.smashystream.com/playere.php?tmdb={0}&season={1}&episode={2}")
     ];
     public static readonly string[] Ids = [.. Providers.Select(p => p.Id)];
     public static readonly string[] AllIds = ["flix", .. Ids];

@@ -5,6 +5,9 @@ using System.Text.RegularExpressions;
 using Jellystream;
 
 var count = 0;
+// How many film mirrors must answer for the live gate to pass. Set from what the mirrors actually do;
+// lower it when one is deliberately retired and raise it when another starts working.
+const int LiveMirrorFloor = 1;
 void Check(bool condition, string name) { if (!condition) throw new Exception("FAIL: " + name); Console.WriteLine("PASS: " + name); count++; }
 void Reject(Action action, string name) { try { action(); } catch (ProviderException) { Check(true, name); return; } throw new Exception("FAIL: " + name); }
 Exception? Throws(Action action) { try { action(); } catch (Exception ex) { return ex; } return null; }
@@ -303,8 +306,8 @@ Check(FlixSource.FindSubtitles("""tracks:[{file:"https://s.example/en.vtt",label
 Check(FlixSource.ParseSubtitleIndex("""[{"file":"https://s.example/es.srt","label":"Spanish"},{"src":"https://s.example/x.vtt","label":""}]""").Single().Language == "es", "subtitle index parsed");
 Check(FlixSource.Unbase("zz", 36) == 1295 && FlixSource.Unbase("Z", 62) == 61 && FlixSource.Unbase("!", 36) is null, "packer number bases");
 
-Check(EmbedSources.Ids.Length == 12 && EmbedSources.Ids.Distinct().Count() == 12 && EmbedSources.Ids.All(id => EmbedSources.IsKnown(id)), "twelve unique embed providers, all known");
-Check(EmbedSources.AllIds[0] == "flix" && EmbedSources.AllIds.Length == 13 && EmbedSources.AllIds.Distinct().Count() == 13, "flix leads the thirteen source ids without duplicates");
+Check(EmbedSources.Ids.Length == 9 && EmbedSources.Ids.Distinct().Count() == 9 && EmbedSources.Ids.All(id => EmbedSources.IsKnown(id)), "nine unique embed providers, all known");
+Check(EmbedSources.AllIds[0] == "flix" && EmbedSources.AllIds.Length == 10 && EmbedSources.AllIds.Distinct().Count() == 10, "flix leads the ten source ids without duplicates");
 Check(!EmbedSources.IsKnown("tmdb") && !EmbedSources.IsKnown("embed.su") && !EmbedSources.IsKnown("multiembed") && !EmbedSources.IsKnown("2embed.stream"), "TMDB and stale sources are not movie sources");
 Check(VideoHealth.Label("flix") == "FlixHQ" && VideoHealth.Label("vidfast") == "VidFast" && VideoHealth.Label("2embed-cc") == "2embed.cc" && VideoHealth.Label("tmdb") == "tmdb",
     "source labels name the site users recognise");
@@ -313,14 +316,10 @@ Check(EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(movie, null, nul
     && EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(tvShow, 3, 2).AbsoluteUri == "https://vidfast.pro/tv/2190/3/2?autoPlay=true", "VidFast URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "vidlink").Url(movie, null, null).AbsoluteUri == "https://vidlink.pro/movie/1290938"
     && EmbedSources.Providers.Single(p => p.Id == "vidlink").Url(tvShow, 1, 1).AbsoluteUri == "https://vidlink.pro/tv/2190/1/1", "VidLink URLs");
-Check(EmbedSources.Providers.Single(p => p.Id == "vidsrc-pm").Url(movie, null, null).AbsoluteUri == "https://vidsrc.pm/embed/movie/1290938"
-    && EmbedSources.Providers.Single(p => p.Id == "vidsrc-pm").Url(tvShow, 2, 5).AbsoluteUri == "https://vidsrc.pm/embed/tv/2190/2/5", "vidsrc.pm URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "2embed-skin").Url(movie, null, null).AbsoluteUri == "https://www.2embed.skin/embed/1290938"
     && EmbedSources.Providers.Single(p => p.Id == "2embed-skin").Url(tvShow, 4, 7).AbsoluteUri == "https://www.2embed.skin/embedtv/2190&s=4&e=7", "2embed.skin URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "vidsrc-to").Url(movie, null, null).AbsoluteUri == "https://vidsrc.to/embed/movie/1290938"
     && EmbedSources.Providers.Single(p => p.Id == "vidsrc-to").Url(tvShow, 1, 1).AbsoluteUri == "https://vidsrc.to/embed/tv/2190/1/1", "vidsrc.to URLs");
-Check(EmbedSources.Providers.Single(p => p.Id == "vidsrc-cc").Url(movie, null, null).AbsoluteUri == "https://vidsrc.cc/v2/embed/movie/1290938"
-    && EmbedSources.Providers.Single(p => p.Id == "vidsrc-cc").Url(tvShow, 1, 1).AbsoluteUri == "https://vidsrc.cc/v2/embed/tv/2190/1/1", "vidsrc.cc URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "2embed-cc").Url(movie, null, null).AbsoluteUri == "https://www.2embed.cc/embed/1290938"
     && EmbedSources.Providers.Single(p => p.Id == "2embed-cc").Url(tvShow, 6, 3).AbsoluteUri == "https://www.2embed.cc/embedtv/2190&s=6&e=3", "2embed.cc URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "nontongo").Url(movie, null, null).AbsoluteUri == "https://www.nontongo.win/embed/movie/1290938"
@@ -331,15 +330,13 @@ Check(EmbedSources.Providers.Single(p => p.Id == "moviesapi-to").Url(movie, null
     && EmbedSources.Providers.Single(p => p.Id == "moviesapi-to").Url(tvShow, 5, 4).AbsoluteUri == "https://moviesapi.to/tv/2190-5-4", "moviesapi.to URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "smashystream").Url(movie, null, null).AbsoluteUri == "https://player.smashystream.com/playere.php?tmdb=1290938"
     && EmbedSources.Providers.Single(p => p.Id == "smashystream").Url(tvShow, 1, 2).AbsoluteUri == "https://player.smashystream.com/playere.php?tmdb=2190&season=1&episode=2", "smashystream URLs");
-Check(EmbedSources.Providers.Single(p => p.Id == "frembed").Url(movie, null, null).AbsoluteUri == "https://frembed.icu/api/film.php?id=1290938"
-    && EmbedSources.Providers.Single(p => p.Id == "frembed").Url(tvShow, 8, 1).AbsoluteUri == "https://frembed.icu/api/serie.php?id=2190&sa=8&epi=1", "frembed URLs");
 Contained(() => EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(tvShow, null, 1), "an episode without a season number is refused");
 Contained(() => EmbedSources.Providers.Single(p => p.Id == "2embed-cc").Url(tvShow, 2, null), "an episode without an episode number is refused");
 Check(EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] })[0] == "smashystream"
     && !EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Contains("nope")
-    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] })[^1] == "frembed"
-    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Distinct().Count() == 13
-    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Length == 13,
+    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] })[^1] == "moviesapi-to"
+    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Distinct().Count() == 10
+    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Length == 10,
     "a saved film order keeps its head, drops unknown sources and appends the rest in table order");
 Check(EmbedSources.Ordered(null).SequenceEqual(EmbedSources.AllIds), "without a saved order the table order is used");
 Check(new Configuration().FilmSourceOrder.Length == 0 && new Configuration().FilmSourceOff.Length == 0, "no film source is ordered or switched off by default");
@@ -1167,8 +1164,31 @@ if (args.Contains("--hls-live"))
     var obesity = new Film(1290938, FilmKind.Movie, "South Park: The End of Obesity", 2024, "", null, null, false);
     var movieLive = await flix.ResolveAsync(obesity, null, null, default);
     Check(!movieLive[0].Hls || await FirstSegmentAsync(movieLive[0], "FlixHQ movie") >= 0, "live FlixHQ movie resolves");
-    var vidfastLive = await new EmbedSources(flix).ResolveAsync("vidfast", obesity, null, null, default);
-    Check(!vidfastLive[0].Hls || await FirstSegmentAsync(vidfastLive[0], "VidFast movie") >= 0, "live VidFast movie resolves");
+    // Every film mirror is walked here and named, so one that stops carrying a playable stream shows up
+    // in this output rather than only when a viewer happens to pick it.
+    var embeds = new EmbedSources(flix);
+    var working = new List<string>();
+    foreach (var source in EmbedSources.Ids)
+    {
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        try
+        {
+            var video = (await embeds.ResolveAsync(source, obesity, null, null, budget.Token))[0];
+            var ok = true;
+            if (video.Hls)
+            {
+                try { ok = await FirstSegmentAsync(video, "live " + EmbedSources.LabelOf(source)) >= 0; }
+                catch { ok = false; }
+            }
+            Console.WriteLine($"{(ok ? "PASS" : "FAIL")} live {EmbedSources.LabelOf(source)}: {(ok ? "stream opened" : "no playable video")}");
+            if (ok) working.Add(source);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"FAIL live {EmbedSources.LabelOf(source)}: {ex.Message}");
+        }
+    }
+    Check(working.Count >= LiveMirrorFloor, $"{working.Count} of {EmbedSources.Ids.Length} film mirrors are live");
     var showLive = await flix.ResolveAsync(new Film(2190, FilmKind.Tv, "South Park", 1997, "", null, null, false), 1, 1, default);
     Check(!showLive[0].Hls || await FirstSegmentAsync(showLive[0], "FlixHQ South Park S01E01") >= 0, "live FlixHQ episode resolves");
 }

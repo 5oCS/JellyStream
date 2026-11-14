@@ -261,7 +261,7 @@
             container.replaceChildren();
             users.forEach(user => {
               const label = document.createElement('label'); label.className = 'checkboxContainer';
-              const input = document.createElement('input', 'emby-checkbox'); input.type = 'checkbox'; input.setAttribute('is', 'emby-checkbox'); input.value = user.Id;
+              const input = document.createElement('input'); input.type = 'checkbox'; input.setAttribute('is', 'emby-checkbox'); input.value = user.Id;
               input.checked = config.AllowedUserIds.some(id => id.replaceAll('-', '').toLowerCase() === user.Id.replaceAll('-', '').toLowerCase());
               const text = document.createElement('span'); text.textContent = user.Name;
               label.append(input, text); container.append(label);
