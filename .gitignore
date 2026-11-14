@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+.jellyfin/
+artifacts/
+.test-state/
+*.user
+*.secret
+__pycache__/

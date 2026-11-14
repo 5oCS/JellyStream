@@ -1,0 +1,64 @@
+using MediaBrowser.Controller;
+using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Controller.Channels;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Jellystream;
+
+public sealed class ServiceRegistration : IPluginServiceRegistrator
+{
+    public void RegisterServices(IServiceCollection services, IServerApplicationHost applicationHost)
+    {
+        services.AddHttpContextAccessor();
+        services.AddSingleton<SafeHttp>();
+        services.AddSingleton<AniListCatalog>();
+        services.AddSingleton<TmdbCatalog>();
+        services.AddSingleton<FlixSource>();
+        services.AddSingleton<EmbedSources>();
+        services.AddSingleton<MusicMetadataStore>();
+        services.AddSingleton(provider => new MonochromeHealth(provider.GetService<Microsoft.Extensions.Logging.ILogger<MonochromeHealth>>()));
+        services.AddSingleton<VideoHealth>();
+        services.AddSingleton<VideoChecks>();
+        services.AddSingleton<VideoProbe>();
+        services.AddHostedService(provider => provider.GetRequiredService<VideoProbe>());
+        services.AddSingleton<MonochromeProbe>();
+        services.AddHostedService(provider => provider.GetRequiredService<MonochromeProbe>());
+        services.AddSingleton<MusicCatalog>();
+        services.AddSingleton<MusicLyrics>();
+        services.AddSingleton<MusicRadio>();
+        services.AddSingleton<MusicMix>();
+        services.AddSingleton<MusicCache>();
+        services.AddSingleton<YtDlp>();
+        services.AddSingleton<MusicAudio>();
+        services.AddSingleton<LibriVoxCatalog>();
+        services.AddSingleton<InternetArchiveCatalog>();
+        services.AddSingleton<PodcastCatalog>();
+        services.AddSingleton<MusicPrefetch>();
+        services.AddSingleton<MusicArtCache>();
+        services.AddSingleton<SubsonicAuth>();
+        services.AddSingleton(_ => new MusicLibraryStore());
+        services.AddSingleton<MusicSaver>();
+        services.AddHostedService(provider => provider.GetRequiredService<MusicSaver>());
+        services.AddSingleton<IAnimeSource, HiAnimeSource>();
+        services.AddSingleton<IAnimeSource, AnimeGgSource>();
+        services.AddSingleton<IAnimeSource, AnimeHeavenSource>();
+        services.AddSingleton<SourceRegistry>();
+        services.AddSingleton<StreamRelay>();
+        services.AddSingleton<IChannel, AnimeChannel>();
+        services.AddSingleton<IChannel, FilmChannel>();
+        services.AddSingleton<IChannel, MusicChannel>();
+        services.AddSingleton<IChannel, AudiobookChannel>();
+        services.AddSingleton<IChannel, PodcastChannel>();
+        services.AddSingleton<SearchHistory>();
+        services.AddSingleton<MediaBrowser.Controller.Library.ISearchProvider, OnlineSearch>();
+        services.AddSingleton<MediaBrowser.Controller.Library.ISearchProvider, FilmSearch>();
+        services.AddSingleton<MediaBrowser.Controller.Library.ISearchProvider, MusicSearch>();
+        services.AddSingleton<MediaBrowser.Controller.Library.ISearchProvider, BookSearch>();
+        services.AddSingleton<MediaBrowser.Controller.Library.ISearchProvider, PodcastSearch>();
+        services.AddScoped<ContentAccess>();
+        services.AddScoped<ChannelAccessFilter>();
+        services.AddScoped<ArtworkAccess>();
+        services.Configure<MvcOptions>(options => options.Filters.AddService<ChannelAccessFilter>());
+    }
+}
