@@ -18,17 +18,17 @@
     <h2>Jellystream</h2>
     <form id="jellystreamForm">
       <div class="jellystreamTabBar">
-        <div class="jellystreamTab active" data-tab="general">General</div>
-        <div class="jellystreamTab" data-tab="movies">Movies</div>
-        <div class="jellystreamTab" data-tab="tv">TV</div>
-        <div class="jellystreamTab" data-tab="music">Music</div>
-        <div class="jellystreamTab" data-tab="podcasts">Podcasts</div>
-        <div class="jellystreamTab" data-tab="audiobooks">Audiobooks</div>
-        <div class="jellystreamTab" data-tab="ebooks">Ebooks</div>
+        <div class="jellystreamTab active" data-tab="general" role="tab" aria-selected="true" aria-controls="tab-general">General</div>
+        <div class="jellystreamTab" data-tab="movies" role="tab" aria-selected="false" aria-controls="tab-movies">Movies</div>
+        <div class="jellystreamTab" data-tab="tv" role="tab" aria-selected="false" aria-controls="tab-tv">TV</div>
+        <div class="jellystreamTab" data-tab="music" role="tab" aria-selected="false" aria-controls="tab-music">Music</div>
+        <div class="jellystreamTab" data-tab="podcasts" role="tab" aria-selected="false" aria-controls="tab-podcasts">Podcasts</div>
+        <div class="jellystreamTab" data-tab="audiobooks" role="tab" aria-selected="false" aria-controls="tab-audiobooks">Audiobooks</div>
+        <div class="jellystreamTab" data-tab="ebooks" role="tab" aria-selected="false" aria-controls="tab-ebooks">Ebooks</div>
       </div>
 
       <!-- General tab -->
-      <div class="jellystreamTabPanel active" id="tab-general">
+      <div class="jellystreamTabPanel active" id="tab-general" role="tabpanel">
         <h3>Plugin</h3>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="jellystreamEnabled"><span>Turn on Jellystream</span></label>
         <h3>Who can watch</h3>
@@ -50,7 +50,7 @@
       </div>
 
       <!-- Movies tab -->
-      <div class="jellystreamTabPanel" id="tab-movies">
+      <div class="jellystreamTabPanel" id="tab-movies" role="tabpanel">
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmEnabled"><span>Show the Movies &amp; TV channel</span></label>
         <div class="inputContainer"><label class="inputLabel" for="tmdbKey">TMDB API key</label><input is="emby-input" type="password" id="tmdbKey" autocomplete="off" spellcheck="false">
           <div class="fieldDescription">Make a free account on themoviedb.org, then go to Settings &gt; API. The short API key and the long read access token both work. The channel stays hidden until a key is set.</div></div>
@@ -116,7 +116,7 @@
       </div>
 
       <!-- TV tab -->
-      <div class="jellystreamTabPanel" id="tab-tv">
+      <div class="jellystreamTabPanel" id="tab-tv" role="tabpanel">
         <h3>Anime sources</h3>
         <div class="fieldDescription">Open a title, then pick a source. Test looks up a well-known show on the site, then its episode list and the first episode's video, so a pass means playing works. It can take up to a minute.</div>
         <div class="jellystreamSource"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="zokoEnabled"><span>HiAnime</span></label>
@@ -132,7 +132,7 @@
       </div>
 
       <!-- Music tab -->
-      <div class="jellystreamTabPanel" id="tab-music">
+      <div class="jellystreamTabPanel" id="tab-music" role="tabpanel">
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicEnabled"><span>Show the Music channel</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicExplicit"><span>Prefer explicit versions</span></label>
         <div class="fieldDescription checkboxFieldDescription">When a song or album also exists as a clean edit, hide the edit and play the original.</div>
@@ -189,7 +189,7 @@
       </div>
 
       <!-- Podcasts tab -->
-      <div class="jellystreamTabPanel" id="tab-podcasts">
+      <div class="jellystreamTabPanel" id="tab-podcasts" role="tabpanel">
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastEnabled"><span>Show the Podcasts channel</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastCurated"><span>Show a few well-known public shows as well</span></label>
         <div class="inputContainer"><label class="inputLabel" for="podcastFeeds">Your podcast feeds</label>
@@ -201,14 +201,14 @@
       </div>
 
       <!-- Audiobooks tab -->
-      <div class="jellystreamTabPanel" id="tab-audiobooks">
+      <div class="jellystreamTabPanel" id="tab-audiobooks" role="tabpanel">
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audiobookEnabled"><span>Show the Audiobooks channel</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audiobookYouTube"><span>YouTube: when a recording is missing from the catalog</span></label>
         <div class="fieldDescription checkboxFieldDescription">Free LibriVox audiobooks, with the Internet Archive answering search. Chapters play from the source's own recording. When neither catalog answers for a book you opened, YouTube is tried instead. This needs yt-dlp and deno on the server, the same tools the Music channel uses; Music, its YouTube switch and its "Play songs from" YouTube entry must all be on as well.</div>
       </div>
 
       <!-- Ebooks tab -->
-      <div class="jellystreamTabPanel" id="tab-ebooks">
+      <div class="jellystreamTabPanel" id="tab-ebooks" role="tabpanel">
         <div class="fieldDescription">Ebook settings will be added here when ebook support is implemented.</div>
       </div>
 
@@ -241,7 +241,7 @@
             const make = document.createElement('button'); make.type = 'button'; make.setAttribute('is', 'emby-button'); make.className = 'raised';
             make.textContent = 'New password';
             make.addEventListener('click', () => { passwords[key] = newPassword(); input.value = passwords[key]; });
-            const remove = document.createElement('button'); remove.type = 'button'; remove.setAttribute('is', 'emby-button'); make.className = 'raised';
+            const remove = document.createElement('button'); remove.type = 'button'; remove.setAttribute('is', 'emby-button'); remove.className = 'raised';
             remove.textContent = 'Remove';
             remove.addEventListener('click', () => { delete passwords[key]; input.value = ''; });
             const help = document.createElement('div'); help.className = 'fieldDescription'; help.textContent = 'Saved when you press Save. Only works for users ticked above.';
@@ -249,11 +249,17 @@
           });
         }
         function showTab(tabId) {
-          page.querySelectorAll('.jellystreamTab').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.tab === tabId);
+          const tabs = page.querySelectorAll('.jellystreamTab');
+          const known = Array.from(tabs).map(t => t.dataset.tab);
+          if (!known.includes(tabId)) tabId = 'general';
+          tabs.forEach(tab => {
+            const active = tab.dataset.tab === tabId;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
           });
           page.querySelectorAll('.jellystreamTabPanel').forEach(panel => {
-            panel.classList.toggle('active', panel.id === 'tab-' + tabId);
+            const active = panel.id === 'tab-' + tabId;
+            panel.classList.toggle('active', active);
           });
           try { localStorage.setItem('jellystreamTab', tabId); } catch {}
         }
