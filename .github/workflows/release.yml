@@ -82,6 +82,6 @@ jobs:
             exit 1
           fi
           echo "DEBUG: Release ID: $release_id"
-          echo "DEBUG: Uploading manifest.json"
-          gh release upload "$TAG" artifacts/manifest.json --clobber
+          echo "DEBUG: Uploading assets"
+          gh release upload "$TAG" artifacts/Jellystream-$VERSION.zip artifacts/Jellystream-$VERSION.zip.sigstore.json artifacts/manifest.json --clobber
           echo "DEBUG: Upload complete"
