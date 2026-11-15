@@ -272,7 +272,8 @@
           page.querySelector('#jellystreamStatus').textContent = 'Loading settings…';
           Dashboard.showLoadingMsg();
           try {
-            const [config = {}, users] = await Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getUsers()]);
+            const [rawConfig, users] = await Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getUsers()]);
+            const config = rawConfig || {};
             page.querySelector('#jellystreamEnabled').checked = config.Enabled;
             page.querySelector('#zokoEnabled').checked = config.ZokoEnabled !== false;
             page.querySelector('#animeGgEnabled').checked = config.AnimeGgEnabled;
@@ -317,7 +318,7 @@
             renderPasswords(users);
             const container = page.querySelector('#jellystreamUsers');
             container.replaceChildren();
-            users.forEach(user => {
+            (users || []).forEach(user => {
               const label = document.createElement('label'); label.className = 'checkboxContainer';
               const input = document.createElement('input'); input.type = 'checkbox'; input.setAttribute('is', 'emby-checkbox'); input.value = user.Id;
               input.checked = (config.AllowedUserIds || []).some(id => id.replaceAll('-', '').toLowerCase() === user.Id.replaceAll('-', '').toLowerCase());
