@@ -272,8 +272,10 @@
           page.querySelector('#jellystreamStatus').textContent = 'Loading settings…';
           Dashboard.showLoadingMsg();
           try {
-            const [rawConfig, users] = await Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getUsers()]);
-            const config = rawConfig || {};
+            let config = {};
+            let users = [];
+            try { config = await ApiClient.getPluginConfiguration(pluginId) || {}; } catch (e) { console.warn('Could not load plugin config:', e.message); }
+            try { users = await ApiClient.getUsers() || []; } catch (e) { console.warn('Could not load users:', e.message); }
             page.querySelector('#jellystreamEnabled').checked = config.Enabled;
             page.querySelector('#zokoEnabled').checked = config.ZokoEnabled !== false;
             page.querySelector('#animeGgEnabled').checked = config.AnimeGgEnabled;
