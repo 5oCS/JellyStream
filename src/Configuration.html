@@ -346,12 +346,10 @@
           event.preventDefault();
           if (!loaded) return;
           Dashboard.showLoadingMsg();
-          let config;
+          let config = {};
           try { config = await ApiClient.getPluginConfiguration(pluginId) || {}; } catch (e) {
             console.warn('Could not read plugin config:', e);
             page.querySelector('#jellystreamStatus').textContent = 'Could not read settings: ' + (e?.message || String(e));
-            Dashboard.hideLoadingMsg();
-            return;
           }
           config.Enabled = page.querySelector('#jellystreamEnabled').checked;
           config.ZokoEnabled = page.querySelector('#zokoEnabled').checked;
