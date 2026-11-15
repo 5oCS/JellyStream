@@ -347,7 +347,7 @@
           if (!loaded) return;
           Dashboard.showLoadingMsg();
           try {
-            const config = await ApiClient.getPluginConfiguration(pluginId);
+            const config = await ApiClient.getPluginConfiguration(pluginId) || {};
             config.Enabled = page.querySelector('#jellystreamEnabled').checked;
             config.ZokoEnabled = page.querySelector('#zokoEnabled').checked;
             config.AnimeGgEnabled = page.querySelector('#animeGgEnabled').checked;
