@@ -46,15 +46,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          echo "DEBUG: TAG=$TAG"
+          echo "DEBUG: GH_TOKEN set: $([ -n \"$GH_TOKEN\" ] && echo yes || echo no)"
+          echo "DEBUG: Running gh auth status"
+          gh auth status 2>&1 || true
+          echo "DEBUG: Running gh release view $TAG"
+          gh release view "$TAG" 2>&1 || echo "DEBUG: gh release view failed (expected for new tag)"
           git fetch --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "refs/tags/$TAG:refs/tags/$TAG"
           notes=$(git tag -l --format='%(contents:body)' "$TAG")
           [ -n "$notes" ] || notes=$(git tag -l --format='%(contents:subject)' "$TAG")
           printf '%s\n' "$notes" > "$RUNNER_TEMP/notes.txt"
+          echo "DEBUG: notes.txt contents: $(cat "$RUNNER_TEMP/notes.txt")"
           # The first release has no manifest.json to continue from, so start from an empty list.
           previous=''
           if gh release view "$TAG" >/dev/null 2>&1; then previous="$TAG"
           else previous=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
           fi
+          echo "DEBUG: previous=$previous"
           if [ -n "$previous" ] && gh release download "$previous" -p manifest.json -D "$RUNNER_TEMP/previous" 2>/dev/null; then
             cp "$RUNNER_TEMP/previous/manifest.json" artifacts/manifest.json
           else
@@ -63,9 +71,14 @@ jobs:
           python3 scripts/manifest.py --manifest artifacts/manifest.json --zip "artifacts/Jellystream-$VERSION.zip" \
             --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Jellystream-$VERSION.zip" \
             --changelog "$(cat "$RUNNER_TEMP/notes.txt")"
+          echo "DEBUG: About to check if release exists"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists, skipping creation"
+            echo "DEBUG: Release $TAG already exists, skipping creation"
           else
+            echo "DEBUG: Release $TAG does not exist, creating it"
             gh release create "$TAG" "artifacts/Jellystream-$VERSION.zip" "artifacts/Jellystream-$VERSION.zip.sigstore.json" --verify-tag --title "Jellystream $VERSION" --notes-file "$RUNNER_TEMP/notes.txt"
+            echo "DEBUG: Release created successfully"
           fi
+          echo "DEBUG: About to upload manifest.json"
           gh release upload "$TAG" artifacts/manifest.json --clobber
+          echo "DEBUG: Upload complete"
