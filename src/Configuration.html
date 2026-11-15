@@ -348,8 +348,8 @@
           Dashboard.showLoadingMsg();
           let config;
           try { config = await ApiClient.getPluginConfiguration(pluginId) || {}; } catch (e) {
-            console.warn('Could not read plugin config:', e.message);
-            page.querySelector('#jellystreamStatus').textContent = 'Could not read settings: ' + e.message;
+            console.warn('Could not read plugin config:', e);
+            page.querySelector('#jellystreamStatus').textContent = 'Could not read settings: ' + (e?.message || String(e));
             Dashboard.hideLoadingMsg();
             return;
           }
@@ -395,10 +395,11 @@
           config.SubsonicPasswords = Object.entries(passwords).filter(([, password]) => password).map(([UserId, Password]) => ({UserId, Password}));
           config.CacheRevision++;
           try {
-            Dashboard.processPluginConfigurationUpdateResult(await ApiClient.updatePluginConfiguration(pluginId, config));
+            await ApiClient.updatePluginConfiguration(pluginId, config);
+            page.querySelector('#jellystreamStatus').textContent = 'Settings saved.';
           } catch (e) {
-            console.warn('Could not save plugin config:', e.message);
-            page.querySelector('#jellystreamStatus').textContent = 'Save failed: ' + e.message;
+            console.warn('Could not save plugin config:', e);
+            page.querySelector('#jellystreamStatus').textContent = 'Save failed: ' + (e?.message || String(e));
           } finally { Dashboard.hideLoadingMsg(); }
         });
         function clockTime(value) { return new Date(value).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}); }
