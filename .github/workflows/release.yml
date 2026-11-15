@@ -48,15 +48,11 @@ jobs:
           set -euo pipefail
           echo "DEBUG: TAG=$TAG"
           echo "DEBUG: GH_TOKEN set: $([ -n \"$GH_TOKEN\" ] && echo yes || echo no)"
-          echo "DEBUG: Running gh auth status"
-          gh auth status 2>&1 || true
-          echo "DEBUG: Running gh release view $TAG"
-          gh release view "$TAG" 2>&1 || echo "DEBUG: gh release view failed (expected for new tag)"
           git fetch --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "refs/tags/$TAG:refs/tags/$TAG"
           notes=$(git tag -l --format='%(contents:body)' "$TAG")
           [ -n "$notes" ] || notes=$(git tag -l --format='%(contents:subject)' "$TAG")
           printf '%s\n' "$notes" > "$RUNNER_TEMP/notes.txt"
-          echo "DEBUG: notes.txt contents: $(cat "$RUNNER_TEMP/notes.txt")"
+          echo "DEBUG: notes.txt: $(cat "$RUNNER_TEMP/notes.txt")"
           # The first release has no manifest.json to continue from, so start from an empty list.
           previous=''
           if gh release view "$TAG" >/dev/null 2>&1; then previous="$TAG"
@@ -71,14 +67,21 @@ jobs:
           python3 scripts/manifest.py --manifest artifacts/manifest.json --zip "artifacts/Jellystream-$VERSION.zip" \
             --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Jellystream-$VERSION.zip" \
             --changelog "$(cat "$RUNNER_TEMP/notes.txt")"
-          echo "DEBUG: About to check if release exists"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "DEBUG: Release $TAG already exists, skipping creation"
-          else
-            echo "DEBUG: Release $TAG does not exist, creating it"
-            gh release create "$TAG" "artifacts/Jellystream-$VERSION.zip" "artifacts/Jellystream-$VERSION.zip.sigstore.json" --verify-tag --title "Jellystream $VERSION" --notes-file "$RUNNER_TEMP/notes.txt"
-            echo "DEBUG: Release created successfully"
+          # Create release via GitHub REST API for reliable error reporting
+          echo "DEBUG: Creating release via REST API"
+          release_response=$(curl -s -X POST "https://api.github.com/repos/$GITHUB_REPOSITORY/releases" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\": \"$TAG\", \"name\": \"Jellystream $VERSION\", \"body\": $(jq -Rs . "$RUNNER_TEMP/notes.txt"), \"draft\": false, \"prerelease\": false}")
+          echo "DEBUG: Release creation response: $release_response"
+          release_id=$(echo "$release_response" | jq -r '.id // empty')
+          if [ -z "$release_id" ]; then
+            echo "ERROR: Failed to create release"
+            echo "$release_response" | jq .
+            exit 1
           fi
-          echo "DEBUG: About to upload manifest.json"
+          echo "DEBUG: Release ID: $release_id"
+          echo "DEBUG: Uploading manifest.json"
           gh release upload "$TAG" artifacts/manifest.json --clobber
           echo "DEBUG: Upload complete"
