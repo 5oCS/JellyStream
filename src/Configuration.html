@@ -8,167 +8,210 @@
       #jellystreamConfig .jellystreamSource { margin-bottom: 1em; }
       #jellystreamConfig .jellystreamRow { display: flex; align-items: center; gap: 0.25em; }
       #jellystreamConfig .jellystreamRow .checkboxContainer, #jellystreamConfig .jellystreamName { flex: 1; margin: 0; }
+      #jellystreamConfig .jellystreamTabBar { display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--secondary-700); margin-bottom: 1em; }
+      #jellystreamConfig .jellystreamTab { flex-shrink: 0; padding: 0.5em 1em; cursor: pointer; color: var(--secondary-700); font-size: 0.95em; white-space: nowrap; }
+      #jellystreamConfig .jellystreamTab.active { color: var(--primary); border-bottom: 2px solid var(--primary); font-weight: 600; }
+      #jellystreamConfig .jellystreamTab.hidden { display: none; }
+      #jellystreamConfig .jellystreamTabPanel { display: none; padding-bottom: 1em; }
+      #jellystreamConfig .jellystreamTabPanel.active { display: block; }
     </style>
     <h2>Jellystream</h2>
     <form id="jellystreamForm">
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="jellystreamEnabled"><span>Turn on Jellystream</span></label>
-      <h3>Who can watch</h3>
-      <p>Only ticked users see the channels. Nobody is ticked by default.</p>
-      <div id="jellystreamUsers"></div>
-      <h3>Anime sources</h3>
-      <div class="fieldDescription">Open a title, then pick a source. Test looks up a well-known show on the site, then its episode list and the first episode's video, so a pass means playing works. It can take up to a minute.</div>
-      <div class="jellystreamSource"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="zokoEnabled"><span>HiAnime</span></label>
-        <p class="jellystreamVideoHealth" data-source="zoko" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="zoko"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
-      <div class="jellystreamSource"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeGgEnabled"><span>AnimeGG</span></label>
-        <p class="jellystreamVideoHealth" data-source="animegg" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="animegg"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
-      <div class="jellystreamSource"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeHeavenEnabled"><span>AnimeHeaven</span></label>
-        <p class="jellystreamVideoHealth" data-source="animeheaven" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="animeheaven"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeFallback"><span>Play from another site when the chosen one fails</span></label>
-      <div class="fieldDescription checkboxFieldDescription">Only a site that lists exactly this title, with exactly one episode of the same number. Watched state stays on the episode you picked.</div>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeNext"><span>Get the next episode ready</span></label>
-      <div class="fieldDescription checkboxFieldDescription">Anime and TV shows: while an episode plays, the next one (on the same site) is looked up in the background, so it starts at once. Some sites take half a minute to start an episode otherwise.</div>
-      <h3>Movies &amp; TV</h3>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmEnabled"><span>Show the Movies &amp; TV channel</span></label>
-      <div class="inputContainer"><label class="inputLabel" for="tmdbKey">TMDB API key</label><input is="emby-input" type="password" id="tmdbKey" autocomplete="off" spellcheck="false">
-        <div class="fieldDescription">Make a free account on themoviedb.org, then go to Settings &gt; API. The short API key and the long read access token both work. The channel stays hidden until a key is set.</div></div>
-      <div class="jellystreamSource"><span class="jellystreamName">TMDB: titles, posters and episode lists</span>
-        <button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="tmdb"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
-      <h4>Play films from</h4>
-      <div class="fieldDescription">The first switched-on source plays the film; when it fails or is too slow the next one is tried, in the order shown. Tick a source to switch it on and use the arrows to reorder. The state of each source updates every 10 seconds; switches and order take effect when you press Save.</div>
-      <ol id="filmOrder" class="jellystreamOrder">
-        <li data-source="flix">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmFlix"><span>FlixHQ: the original site</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="flix" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="flix"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="vidfast">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidfast"><span>VidFast</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="vidfast" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidfast"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="vidlink">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidlink"><span>VidLink</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="vidlink" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidlink"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="vidsrc-pm">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidsrcPm"><span>vidsrc.pm</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="vidsrc-pm" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidsrc-pm"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="2embed-skin">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="film2EmbedSkin"><span>2embed.skin</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="2embed-skin" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="2embed-skin"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="vidsrc-to">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidsrcTo"><span>vidsrc.to</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="vidsrc-to" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidsrc-to"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="vidsrc-cc">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidsrcCc"><span>vidsrc.cc</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="vidsrc-cc" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidsrc-cc"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="2embed-cc">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="film2EmbedCc"><span>2embed.cc</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="2embed-cc" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="2embed-cc"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="nontongo">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmNontongo"><span>nontongo.win</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="nontongo" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="nontongo"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="autoembed-co">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmAutoembed"><span>autoembed.co</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="autoembed-co" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="autoembed-co"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="moviesapi-to">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmMoviesapi"><span>moviesapi.to</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="moviesapi-to" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="moviesapi-to"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="smashystream">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmSmashystream"><span>smashystream</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="smashystream" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="smashystream"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="frembed">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmFrembed"><span>frembed</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p class="jellystreamVideoHealth" data-source="frembed" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="frembed"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
-        </li>
-      </ol>
-      <div class="fieldDescription">Test the key after saving it. Each source's test finds a well-known film and its video.</div>
-      <h3>Music</h3>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicEnabled"><span>Show the Music channel</span></label>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicExplicit"><span>Prefer explicit versions</span></label>
-      <div class="fieldDescription checkboxFieldDescription">When a song or album also exists as a clean edit, hide the edit and play the original.</div>
-      <div class="inputContainer"><label class="inputLabel" for="musicApi">Music catalog address</label><input is="emby-input" type="url" id="musicApi" autocomplete="off" spellcheck="false" placeholder="https://tracks.monochrome.st">
-        <div class="fieldDescription">Leave empty for the default. Lossless FLAC, CD quality or better. Only a plain https address is accepted.</div></div>
-      <h4>Play songs from</h4>
-      <div class="fieldDescription">The first source that has the song plays it; the arrows set the order. Songs played before always come from this server's disk first. The state of each source updates every 10 seconds; switches and order take effect when you press Save.</div>
-      <ol id="playOrder" class="jellystreamOrder">
-        <li data-source="monochrome">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicMonochrome"><span>Monochrome: FLAC, lossless</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <div class="fieldDescription">From the catalog address above. When it is down or slow, the next source plays the song at once.</div>
-          <p id="healthMonochrome" role="status"></p>
-          <button is="emby-button" type="button" class="raised jellystreamTest" data-kind="music" data-source="monochrome"><span>Test now</span></button>
-          <p class="jellystreamTestResult" role="status"></p>
-        </li>
-        <li data-source="youtube">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicYouTube"><span>YouTube: AAC, about 128 kbps</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <div class="fieldDescription">YouTube's official audio, fetched whole into the song cache (a new song takes 15 to 20 seconds). Ranked first, Monochrome is only asked when YouTube does not have the song. This needs yt-dlp and deno on the server: Jellystream downloads both from their official GitHub releases into its data folder, checks each against its published SHA-256, and updates them daily (Scheduled Tasks, "Update YouTube tools").</div>
-          <p id="healthYouTube" role="status"></p>
-          <button is="emby-button" type="button" class="raised jellystreamTest" data-kind="music" data-source="youtube"><span>Test now</span></button>
-          <p class="jellystreamTestResult" role="status"></p>
-        </li>
-      </ol>
-      <h4>Find music with</h4>
-      <div class="fieldDescription">Searches go to the first source. The next one answers when the first is down or takes longer than 6 seconds. Albums and artists always come from the source they were found in.</div>
-      <ol id="searchOrder" class="jellystreamOrder">
-        <li data-source="monochrome">
-          <div class="jellystreamRow"><span class="jellystreamName">Monochrome catalog: always on</span><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <p id="healthMonochromeSearch" role="status"></p>
-        </li>
-        <li data-source="deezer">
-          <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicDeezer"><span>Deezer: descriptions only, no account</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
-          <div class="fieldDescription">Its songs play from Monochrome's copy of the same recording, or from YouTube.</div>
-          <p id="healthDeezer" role="status"></p>
-        </li>
-      </ol>
-      <div class="inputContainer"><label class="inputLabel" for="musicCache">Song cache (MB)</label><input is="emby-input" type="number" id="musicCache" min="0" max="1000000" required>
-        <div class="fieldDescription">Songs you play are kept on this server, so skipping within a song and playing it again are instant. The least recently played make room when it is full. Starred songs, songs in playlists and songs played more than once are kept ready as FLAC whenever Monochrome answers (up to half the cache), so they play even while it is down. 0 turns it off.</div></div>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicPrefetch"><span>Get the next song ready</span></label>
-      <div class="fieldDescription checkboxFieldDescription">While a song plays, the next one in the app's play queue (or on the album) is fetched into the song cache, so it starts at once. When songs come from YouTube (Monochrome is down, or YouTube is first), opening an album also fetches its first song. Needs the song cache.</div>
-      <div class="inputContainer"><label class="inputLabel" for="ytDlpPath">yt-dlp path (optional)</label><input is="emby-input" type="text" id="ytDlpPath" autocomplete="off" spellcheck="false">
-        <div class="fieldDescription">Use your own yt-dlp instead of the downloaded one. Leave empty to let Jellystream manage it.</div></div>
-      <div class="inputContainer"><label class="inputLabel" for="denoPath">deno path (optional)</label><input is="emby-input" type="text" id="denoPath" autocomplete="off" spellcheck="false">
-        <div class="fieldDescription">Use your own deno instead of the downloaded one. Leave empty to let Jellystream manage it.</div></div>
-      <div class="inputContainer"><label class="inputLabel" for="youTubeProxy">YouTube proxy (optional)</label><input is="emby-input" type="password" id="youTubeProxy" autocomplete="off" spellcheck="false" placeholder="http://user:password@vpn:8888">
-        <div class="fieldDescription">YouTube refuses many data centre addresses ("Sign in to confirm you're not a bot"). Every YouTube search and download then goes through this proxy instead, for example a VPN container next to Jellyfin: http or socks5, with a host and port. Nothing else Jellystream fetches uses it. Needs the song cache.</div></div>
-      <div class="inputContainer"><label class="inputLabel" for="lastFmKey">Last.fm API key (optional)</label><input is="emby-input" type="password" id="lastFmKey" autocomplete="off" spellcheck="false">
-        <div class="fieldDescription">Radio mixes an artist with similar ones, as ListenBrainz knows them. For artists ListenBrainz has no data on, a free key from last.fm/api is used as well.</div></div>
-      <div class="inputContainer"><label class="inputLabel" for="musicFolder">Music library folder</label><input is="emby-input" type="text" id="musicFolder" autocomplete="off" spellcheck="false" placeholder="/media/music/Jellystream">
-        <div class="fieldDescription">Albums you mark as a favourite (the heart on an album in the Music channel, or a star in a Subsonic app) are saved here as tagged FLAC files, one folder per artist and album, so they play offline and in any music app. Use a folder that belongs to a Jellyfin music library and that Jellyfin can write to. Existing files are never replaced. Albums are saved slowly, one song every 20 seconds, to stay within the catalog's limits. Leave empty to save nothing.</div></div>
-      <button is="emby-button" type="button" id="musicSaveStarred" class="raised block" disabled><span>Save every starred album now</span></button>
-      <p id="musicSaveStatus" role="status"></p>
-      <ul id="musicSaves"></ul>
-      <h3>Audiobooks</h3>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audiobookEnabled"><span>Show the Audiobooks channel</span></label>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audiobookYouTube"><span>YouTube: when a recording is missing from the catalog</span></label>
-      <div class="fieldDescription checkboxFieldDescription">Free LibriVox audiobooks, with the Internet Archive answering search. Chapters play from the source's own recording. When neither catalog answers for a book you opened, YouTube is tried instead. This needs yt-dlp and deno on the server, the same tools the Music channel uses; Music, its YouTube switch and its "Play songs from" YouTube entry must all be on as well.</div>
-      <h3>Podcasts</h3>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastEnabled"><span>Show the Podcasts channel</span></label>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastCurated"><span>Show a few well-known public shows as well</span></label>
-      <div class="inputContainer"><label class="inputLabel" for="podcastFeeds">Your podcast feeds</label>
-        <textarea is="emby-input" id="podcastFeeds" rows="6" spellcheck="false" autocomplete="off" placeholder="https://example.com/feed.xml"></textarea>
-        <div class="fieldDescription">One RSS address per line, the same one you would paste into a podcast app. Any site is accepted, as long as it answers over http or https. A feed that is listed here is read only when a show is opened, then kept for half an hour; a feed that will not load is retried on the next refresh rather than every time.</div></div>
-      <div class="fieldDescription checkboxFieldDescription">Episodes play from the feed's own file. An episode with both a recording and a video plays the recording; one with only a video plays the video, which is shown as a video rather than audio. Search looks through the shows listed above as well.</div>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastYouTube"><span>YouTube: when an episode has no recording of its own</span></label>
-      <div class="fieldDescription checkboxFieldDescription">Some shows only link to YouTube instead of hosting a file. This plays their audio through YouTube, which needs yt-dlp and deno on the server, the same tools the Music channel uses; Music, its YouTube switch and its "Play songs from" YouTube entry must all be on as well. Video is not played this way.</div>
-      <h3>Subsonic apps</h3>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="subsonicEnabled"><span>Turn on the Subsonic API</span></label>
-      <div class="fieldDescription checkboxFieldDescription">For Symfonium, Feishin, Tempo, play:Sub and other Subsonic apps. In the app, use the server address <code id="subsonicAddress"></code>, the Jellyfin username, and the app password below. The Jellyfin password does not work there. A new password replaces the old one.</div>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="subsonicLossless"><span>Always send lossless unless the app limits the bit rate</span></label>
-      <div class="fieldDescription checkboxFieldDescription">Some apps, Amperfy among them, ask for MP3 by default. With this on they get the original FLAC instead, which sounds better and seeks faster. A data saving limit in the app, such as 128 or 320 kbps, still gets a smaller converted file.</div>
-      <div id="subsonicPasswords"></div>
-      <h3>Content filters</h3>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="hideAdult"><span>Hide adult titles</span></label>
-      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="hideEcchi"><span>Hide ecchi titles</span></label>
-      <p>Anime only, based on AniList tags, not an age rating. Movies &amp; TV never shows titles TMDB marks as adult.</p>
-      <h3>Cache</h3>
-      <div class="inputContainer"><label class="inputLabel" for="jellystreamCache">Catalog cache (minutes)</label><input is="emby-input" type="number" id="jellystreamCache" min="1" max="1440" required></div>
+      <div class="jellystreamTabBar">
+        <div class="jellystreamTab active" data-tab="general" role="tab" aria-selected="true" aria-controls="tab-general">General</div>
+        <div class="jellystreamTab" data-tab="movies" role="tab" aria-selected="false" aria-controls="tab-movies">Movies</div>
+        <div class="jellystreamTab" data-tab="tv" role="tab" aria-selected="false" aria-controls="tab-tv">TV</div>
+        <div class="jellystreamTab" data-tab="music" role="tab" aria-selected="false" aria-controls="tab-music">Music</div>
+        <div class="jellystreamTab" data-tab="podcasts" role="tab" aria-selected="false" aria-controls="tab-podcasts">Podcasts</div>
+        <div class="jellystreamTab" data-tab="audiobooks" role="tab" aria-selected="false" aria-controls="tab-audiobooks">Audiobooks</div>
+        <div class="jellystreamTab" data-tab="ebooks" role="tab" aria-selected="false" aria-controls="tab-ebooks">Ebooks</div>
+      </div>
+
+      <!-- General tab -->
+      <div class="jellystreamTabPanel active" id="tab-general" role="tabpanel">
+        <h3>Plugin</h3>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="jellystreamEnabled"><span>Turn on Jellystream</span></label>
+        <h3>Who can watch</h3>
+        <p>Only ticked users see the channels. Nobody is ticked by default.</p>
+        <div id="jellystreamUsers"></div>
+        <h3>Subsonic apps</h3>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="subsonicEnabled"><span>Turn on the Subsonic API</span></label>
+        <div class="fieldDescription checkboxFieldDescription">For Symfonium, Feishin, Tempo, play:Sub and other Subsonic apps. In the app, use the server address <code id="subsonicAddress"></code>, the Jellyfin username, and the app password below. The Jellyfin password does not work there. A new password replaces the old one.</div>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="subsonicLossless"><span>Always send lossless unless the app limits the bit rate</span></label>
+        <div class="fieldDescription checkboxFieldDescription">Some apps, Amperfy among them, ask for MP3 by default. With this on they get the original FLAC instead, which sounds better and seeks faster. A data saving limit in the app, such as 128 or 320 kbps, still gets a smaller converted file.</div>
+        <div id="subsonicPasswords"></div>
+        <h3>Content filters</h3>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="hideAdult"><span>Hide adult titles</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="hideEcchi"><span>Hide ecchi titles</span></label>
+        <p>Anime only, based on AniList tags, not an age rating. Movies &amp; TV never shows titles TMDB marks as adult.</p>
+        <h3>Cache</h3>
+        <div class="inputContainer"><label class="inputLabel" for="jellystreamCache">Catalog cache (minutes)</label><input is="emby-input" type="number" id="jellystreamCache" min="1" max="1440" required></div>
+        <div class="fieldDescription">How long Jellystream remembers what titles each site lists before asking again. Defaults to 60 minutes.</div>
+      </div>
+
+      <!-- Movies tab -->
+      <div class="jellystreamTabPanel" id="tab-movies" role="tabpanel">
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmEnabled"><span>Show the Movies &amp; TV channel</span></label>
+        <div class="inputContainer"><label class="inputLabel" for="tmdbKey">TMDB API key</label><input is="emby-input" type="password" id="tmdbKey" autocomplete="off" spellcheck="false">
+          <div class="fieldDescription">Make a free account on themoviedb.org, then go to Settings &gt; API. The short API key and the long read access token both work. The channel stays hidden until a key is set.</div></div>
+        <div class="jellystreamSource"><span class="jellystreamName">TMDB: titles, posters and episode lists</span>
+          <button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="tmdb"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
+        <h4>Play films from</h4>
+        <div class="fieldDescription">The first switched-on source plays the film; when it fails or is too slow the next one is tried, in the order shown. Tick a source to switch it on and use the arrows to reorder. The state of each source updates every 10 seconds; switches and order take effect when you press Save.</div>
+        <ol id="filmOrder" class="jellystreamOrder">
+          <li data-source="flix">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmFlix"><span>FlixHQ: the original site</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="flix" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="flix"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="vidfast">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidfast"><span>VidFast</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="vidfast" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidfast"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="vidlink">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidlink"><span>VidLink</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="vidlink" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidlink"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="vidsrc-pm">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidsrcPm"><span>vidsrc.pm</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="vidsrc-pm" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidsrc-pm"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="2embed-skin">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="film2EmbedSkin"><span>2embed.skin</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="2embed-skin" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="2embed-skin"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="vidsrc-to">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidsrcTo"><span>vidsrc.to</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="vidsrc-to" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidsrc-to"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="vidsrc-cc">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmVidsrcCc"><span>vidsrc.cc</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="vidsrc-cc" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="vidsrc-cc"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="2embed-cc">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="film2EmbedCc"><span>2embed.cc</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="2embed-cc" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="2embed-cc"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="nontongo">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmNontongo"><span>nontongo.win</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="nontongo" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="nontongo"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="autoembed-co">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmAutoembed"><span>autoembed.co</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="autoembed-co" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="autoembed-co"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="moviesapi-to">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmMoviesapi"><span>moviesapi.to</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="moviesapi-to" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="moviesapi-to"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="smashystream">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmSmashystream"><span>smashystream</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="smashystream" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="smashystream"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="frembed">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmFrembed"><span>frembed</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="frembed" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="frembed"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+        </ol>
+        <div class="fieldDescription">Test the key after saving it. Each source's test finds a well-known film and its video.</div>
+      </div>
+
+      <!-- TV tab -->
+      <div class="jellystreamTabPanel" id="tab-tv" role="tabpanel">
+        <h3>Anime sources</h3>
+        <div class="fieldDescription">Open a title, then pick a source. Test looks up a well-known show on the site, then its episode list and the first episode's video, so a pass means playing works. It can take up to a minute.</div>
+        <div class="jellystreamSource"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="zokoEnabled"><span>HiAnime</span></label>
+          <p class="jellystreamVideoHealth" data-source="zoko" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="zoko"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
+        <div class="jellystreamSource"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeGgEnabled"><span>AnimeGG</span></label>
+          <p class="jellystreamVideoHealth" data-source="animegg" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="animegg"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
+        <div class="jellystreamSource"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeHeavenEnabled"><span>AnimeHeaven</span></label>
+          <p class="jellystreamVideoHealth" data-source="animeheaven" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="animeheaven"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeFallback"><span>Play from another site when the chosen one fails</span></label>
+        <div class="fieldDescription checkboxFieldDescription">Only a site that lists exactly this title, with exactly one episode of the same number. Watched state stays on the episode you picked.</div>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="animeNext"><span>Get the next episode ready</span></label>
+        <div class="fieldDescription checkboxFieldDescription">Anime and TV shows: while an episode plays, the next one (on the same site) is looked up in the background, so it starts at once. Some sites take half a minute to start an episode otherwise.</div>
+      </div>
+
+      <!-- Music tab -->
+      <div class="jellystreamTabPanel" id="tab-music" role="tabpanel">
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicEnabled"><span>Show the Music channel</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicExplicit"><span>Prefer explicit versions</span></label>
+        <div class="fieldDescription checkboxFieldDescription">When a song or album also exists as a clean edit, hide the edit and play the original.</div>
+        <div class="inputContainer"><label class="inputLabel" for="musicApi">Music catalog address</label><input is="emby-input" type="url" id="musicApi" autocomplete="off" spellcheck="false" placeholder="https://tracks.monochrome.st">
+          <div class="fieldDescription">Leave empty for the default. Lossless FLAC, CD quality or better. Only a plain https address is accepted.</div></div>
+        <h4>Play songs from</h4>
+        <div class="fieldDescription">The first source that has the song plays it; the arrows set the order. Songs played before always come from this server's disk first. The state of each source updates every 10 seconds; switches and order take effect when you press Save.</div>
+        <ol id="playOrder" class="jellystreamOrder">
+          <li data-source="monochrome">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicMonochrome"><span>Monochrome: FLAC, lossless</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <div class="fieldDescription">From the catalog address above. When it is down or slow, the next source plays the song at once.</div>
+            <p id="healthMonochrome" role="status"></p>
+            <button is="emby-button" type="button" class="raised jellystreamTest" data-kind="music" data-source="monochrome"><span>Test now</span></button>
+            <p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="youtube">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicYouTube"><span>YouTube: AAC, about 128 kbps</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <div class="fieldDescription">YouTube's official audio, fetched whole into the song cache (a new song takes 15 to 20 seconds). Ranked first, Monochrome is only asked when YouTube does not have the song. This needs yt-dlp and deno on the server: Jellystream downloads both from their official GitHub releases into its data folder, checks each against its published SHA-256, and updates them daily (Scheduled Tasks, "Update YouTube tools").</div>
+            <p id="healthYouTube" role="status"></p>
+            <button is="emby-button" type="button" class="raised jellystreamTest" data-kind="music" data-source="youtube"><span>Test now</span></button>
+            <p class="jellystreamTestResult" role="status"></p>
+          </li>
+        </ol>
+        <h4>Find music with</h4>
+        <div class="fieldDescription">Searches go to the first source. The next one answers when the first is down or takes longer than 6 seconds. Albums and artists always come from the source they were found in.</div>
+        <ol id="searchOrder" class="jellystreamOrder">
+          <li data-source="monochrome">
+            <div class="jellystreamRow"><span class="jellystreamName">Monochrome catalog: always on</span><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p id="healthMonochromeSearch" role="status"></p>
+          </li>
+          <li data-source="deezer">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicDeezer"><span>Deezer: descriptions only, no account</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <div class="fieldDescription">Its songs play from Monochrome's copy of the same recording, or from YouTube.</div>
+            <p id="healthDeezer" role="status"></p>
+          </li>
+        </ol>
+        <div class="inputContainer"><label class="inputLabel" for="musicCache">Song cache (MB)</label><input is="emby-input" type="number" id="musicCache" min="0" max="1000000" required>
+          <div class="fieldDescription">Songs you play are kept on this server, so skipping within a song and playing it again are instant. The least recently played make room when it is full. Starred songs, songs in playlists and songs played more than once are kept ready as FLAC whenever Monochrome answers (up to half the cache), so they play even while it is down. 0 turns it off.</div></div>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="musicPrefetch"><span>Get the next song ready</span></label>
+        <div class="fieldDescription checkboxFieldDescription">While a song plays, the next one in the app's play queue (or on the album) is fetched into the song cache, so it starts at once. When songs come from YouTube (Monochrome is down, or YouTube is first), opening an album also fetches its first song. Needs the song cache.</div>
+        <div class="inputContainer"><label class="inputLabel" for="ytDlpPath">yt-dlp path (optional)</label><input is="emby-input" type="text" id="ytDlpPath" autocomplete="off" spellcheck="false">
+          <div class="fieldDescription">Use your own yt-dlp instead of the downloaded one. Leave empty to let Jellystream manage it.</div></div>
+        <div class="inputContainer"><label class="inputLabel" for="denoPath">deno path (optional)</label><input is="emby-input" type="text" id="denoPath" autocomplete="off" spellcheck="false">
+          <div class="fieldDescription">Use your own deno instead of the downloaded one. Leave empty to let Jellystream manage it.</div></div>
+        <div class="inputContainer"><label class="inputLabel" for="youTubeProxy">YouTube proxy (optional)</label><input is="emby-input" type="password" id="youTubeProxy" autocomplete="off" spellcheck="false" placeholder="http://user:password@vpn:8888">
+          <div class="fieldDescription">YouTube refuses many data centre addresses ("Sign in to confirm you're not a bot"). Every YouTube search and download then goes through this proxy instead, for example a VPN container next to Jellyfin: http or socks5, with a host and port. Nothing else Jellystream fetches uses it. Needs the song cache.</div></div>
+        <div class="inputContainer"><label class="inputLabel" for="lastFmKey">Last.fm API key (optional)</label><input is="emby-input" type="password" id="lastFmKey" autocomplete="off" spellcheck="false">
+          <div class="fieldDescription">Radio mixes an artist with similar ones, as ListenBrainz knows them. For artists ListenBrainz has no data on, a free key from last.fm/api is used as well.</div></div>
+        <div class="inputContainer"><label class="inputLabel" for="musicFolder">Music library folder</label><input is="emby-input" type="text" id="musicFolder" autocomplete="off" spellcheck="false" placeholder="/media/music/Jellystream">
+          <div class="fieldDescription">Albums you mark as a favourite (the heart on an album in the Music channel, or a star in a Subsonic app) are saved here as tagged FLAC files, one folder per artist and album, so they play offline and in any music app. Use a folder that belongs to a Jellyfin music library and that Jellyfin can write to. Existing files are never replaced. Albums are saved slowly, one song every 20 seconds, to stay within the catalog's limits. Leave empty to save nothing.</div></div>
+        <button is="emby-button" type="button" id="musicSaveStarred" class="raised block" disabled><span>Save every starred album now</span></button>
+        <p id="musicSaveStatus" role="status"></p>
+        <ul id="musicSaves"></ul>
+      </div>
+
+      <!-- Podcasts tab -->
+      <div class="jellystreamTabPanel" id="tab-podcasts" role="tabpanel">
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastEnabled"><span>Show the Podcasts channel</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastCurated"><span>Show a few well-known public shows as well</span></label>
+        <div class="inputContainer"><label class="inputLabel" for="podcastFeeds">Your podcast feeds</label>
+          <textarea is="emby-input" id="podcastFeeds" rows="6" spellcheck="false" autocomplete="off" placeholder="https://example.com/feed.xml"></textarea>
+          <div class="fieldDescription">One RSS address per line, the same one you would paste into a podcast app. Any site is accepted, as long as it answers over http or https. A feed that is listed here is read only when a show is opened, then kept for half an hour; a feed that will not load is retried on the next refresh rather than every time.</div></div>
+        <div class="fieldDescription checkboxFieldDescription">Episodes play from the feed's own file. An episode with both a recording and a video plays the recording; one with only a video plays the video, which is shown as a video rather than audio. Search looks through the shows listed above as well.</div>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="podcastYouTube"><span>YouTube: when an episode has no recording of its own</span></label>
+        <div class="fieldDescription checkboxFieldDescription">Some shows only link to YouTube instead of hosting a file. This plays their audio through YouTube, which needs yt-dlp and deno on the server, the same tools the Music channel uses; Music, its YouTube switch and its "Play songs from" YouTube entry must all be on as well. Video is not played this way.</div>
+      </div>
+
+      <!-- Audiobooks tab -->
+      <div class="jellystreamTabPanel" id="tab-audiobooks" role="tabpanel">
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audiobookEnabled"><span>Show the Audiobooks channel</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audiobookYouTube"><span>YouTube: when a recording is missing from the catalog</span></label>
+        <div class="fieldDescription checkboxFieldDescription">Free LibriVox audiobooks, with the Internet Archive answering search. Chapters play from the source's own recording. When neither catalog answers for a book you opened, YouTube is tried instead. This needs yt-dlp and deno on the server, the same tools the Music channel uses; Music, its YouTube switch and its "Play songs from" YouTube entry must all be on as well.</div>
+      </div>
+
+      <!-- Ebooks tab -->
+      <div class="jellystreamTabPanel" id="tab-ebooks" role="tabpanel">
+        <div class="fieldDescription">Ebook settings will be added here when ebook support is implemented.</div>
+      </div>
+
       <p id="jellystreamStatus" role="status">Loading settings…</p>
       <button is="emby-button" type="submit" id="jellystreamSave" class="raised button-submit block" disabled><span>Save</span></button>
       <h3>Maintenance</h3>
@@ -204,6 +247,21 @@
             const help = document.createElement('div'); help.className = 'fieldDescription'; help.textContent = 'Saved when you press Save. Only works for users ticked above.';
             row.append(label, input, make, remove, help); container.append(row);
           });
+        }
+        function showTab(tabId) {
+          const tabs = page.querySelectorAll('.jellystreamTab');
+          const known = Array.from(tabs).map(t => t.dataset.tab);
+          if (!known.includes(tabId)) tabId = 'general';
+          tabs.forEach(tab => {
+            const active = tab.dataset.tab === tabId;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          page.querySelectorAll('.jellystreamTabPanel').forEach(panel => {
+            const active = panel.id === 'tab-' + tabId;
+            panel.classList.toggle('active', active);
+          });
+          try { localStorage.setItem('jellystreamTab', tabId); } catch {}
         }
         page.addEventListener('viewshow', async function () {
           loaded = false;
@@ -266,6 +324,8 @@
               const text = document.createElement('span'); text.textContent = user.Name;
               label.append(input, text); container.append(label);
             });
+            const savedTab = localStorage.getItem('jellystreamTab') || 'general';
+            showTab(savedTab);
             loaded = true;
             page.querySelector('#jellystreamSave').disabled = false;
             page.querySelector('#jellystreamRefresh').disabled = false;
@@ -415,7 +475,6 @@
               : 'This folder is not part of any Jellyfin library yet, so saved albums will not show up. Add it to a music library.';
             result.Saves.forEach(save => {
               const item = document.createElement('li');
-              // No template literals on this page: Jellyfin treats dollar-brace text in plugin pages as translation keys and replaces it.
               item.textContent = save.Artist + ' - ' + save.Album + ': ' + (states[save.State] || save.State)
                 + (save.State === 'saving' ? ' (' + save.Saved + ' of ' + save.Total + ')' : '') + (save.Note ? '. ' + save.Note : '') + ' (starred by ' + save.User + ')';
               list.append(item);
@@ -453,6 +512,9 @@
             status.textContent = 'Could not clear search results. Please try again.';
           } finally { button.disabled = !loaded; }
         });
+        page.querySelectorAll('.jellystreamTab').forEach(tab => tab.addEventListener('click', function () {
+          showTab(this.dataset.tab);
+        }));
       })();
     </script>
   </div></div>
