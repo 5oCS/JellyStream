@@ -219,6 +219,8 @@ public sealed class AudiobookChannel(LibriVoxCatalog books, InternetArchiveCatal
             Path = location.ToString(), Protocol = MediaProtocol.Http, Container = container, IsRemote = true,
             Name = (chapter.Source == LibriVoxCatalog.SourceId ? "LibriVox" : "Internet Archive") + " · " + container.ToUpperInvariant(),
             SupportsDirectPlay = true, SupportsDirectStream = true, SupportsTranscoding = true,
+            // Jellyfin needs a stream to play, or it refuses the request and playback stops at once.
+            MediaStreams = [SourceStreams.Audio(container)],
             RunTimeTicks = chapter.Seconds is > 0 ? TimeSpan.FromSeconds(chapter.Seconds.Value).Ticks : null
         };
     }
