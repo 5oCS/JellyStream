@@ -318,8 +318,8 @@ Check(!EmbedSources.IsKnown("tmdb") && !EmbedSources.IsKnown("embed.su") && !Emb
 Check(VideoHealth.Label("flix") == "FlixHQ" && VideoHealth.Label("vidfast") == "VidFast" && VideoHealth.Label("2embed-cc") == "2embed.cc" && VideoHealth.Label("tmdb") == "tmdb",
     "source labels name the site users recognise");
 var tvShow = new Film(2190, FilmKind.Tv, "South Park", 1997, "", null, null, false);
-Check(EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(movie, null, null).AbsoluteUri == "https://vidfast.pro/movie/1290938?autoPlay=true"
-    && EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(tvShow, 3, 2).AbsoluteUri == "https://vidfast.pro/tv/2190/3/2?autoPlay=true", "VidFast URLs");
+Check(EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(movie, null, null).AbsoluteUri == "https://vidfast.vc/movie/1290938?autoPlay=true"
+    && EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(tvShow, 3, 2).AbsoluteUri == "https://vidfast.vc/tv/2190/3/2?autoPlay=true", "VidFast URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "vidlink").Url(movie, null, null).AbsoluteUri == "https://vidlink.pro/movie/1290938"
     && EmbedSources.Providers.Single(p => p.Id == "vidlink").Url(tvShow, 1, 1).AbsoluteUri == "https://vidlink.pro/tv/2190/1/1", "VidLink URLs");
 Check(EmbedSources.Providers.Single(p => p.Id == "2embed-skin").Url(movie, null, null).AbsoluteUri == "https://www.2embed.skin/embed/1290938"

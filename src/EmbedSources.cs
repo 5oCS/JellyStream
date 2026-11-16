@@ -25,7 +25,7 @@ public sealed class EmbedSources(FlixSource flix)
 {
     public static readonly EmbedProvider[] Providers =
     [
-        new("vidfast", "VidFast", "https://vidfast.pro/movie/{0}?autoPlay=true", "https://vidfast.pro/tv/{0}/{1}/{2}?autoPlay=true"),
+        new("vidfast", "VidFast", "https://vidfast.vc/movie/{0}?autoPlay=true", "https://vidfast.vc/tv/{0}/{1}/{2}?autoPlay=true"),
         new("vidlink", "VidLink", "https://vidlink.pro/movie/{0}", "https://vidlink.pro/tv/{0}/{1}/{2}"),
         new("2embed-skin", "2embed.skin", "https://www.2embed.skin/embed/{0}", "https://www.2embed.skin/embedtv/{0}&s={1}&e={2}"),
         new("vidsrc-to", "vidsrc.to", "https://vidsrc.to/embed/movie/{0}", "https://vidsrc.to/embed/tv/{0}/{1}/{2}"),
