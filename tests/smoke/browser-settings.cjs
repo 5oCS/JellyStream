@@ -7,7 +7,7 @@ const fs = require('node:fs');
   const browser = await chromium.launch({executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox']});
   const context = await browser.newContext();
   const headers = {Authorization: 'MediaBrowser Token="' + state.admin + '"'};
-  const path = '/Plugins/a74fdb2e-938f-483b-b2ef-f527e14ff724/Configuration';
+  const path = '/Plugins/06423df8-a0cd-4ab9-a450-febb5ecb9133/Configuration';
   try {
     const info = await (await context.request.get(base + '/System/Info/Public')).json();
     if (info.ServerName !== 'Jellystream isolated test') throw new Error('Refusing settings test on a production server');

@@ -305,6 +305,12 @@ Check(FlixSource.FindSubtitles("""tracks:[{file:"https:\/\/s.example\/en.vtt",la
 Check(FlixSource.FindSubtitles("""tracks:[{file:"https://s.example/en.vtt",label:" "}]""").Count == 0, "player subtitle tracks without a label are skipped");
 Check(FlixSource.ParseSubtitleIndex("""[{"file":"https://s.example/es.srt","label":"Spanish"},{"src":"https://s.example/x.vtt","label":""}]""").Single().Language == "es", "subtitle index parsed");
 Check(FlixSource.Unbase("zz", 36) == 1295 && FlixSource.Unbase("Z", 62) == 61 && FlixSource.Unbase("!", 36) is null, "packer number bases");
+var playerPage = """<base href="/pl/"><script>var Q = {"type":"movie","id":"tt123","t":"tok","ssr":{"servers":[{"ref":"r1","name":"A"},{"ref":"r2","name":"B"}]}};</script>""";
+Check(FlixSource.PlayerConfig(playerPage) is { Token: "tok" } p && p.Servers.SequenceEqual(["r1", "r2"]), "the player config gives the token and the servers");
+Check(FlixSource.PlayerConfig("""var x = {"t":"no"};""") is null, "a page without a player config is not one");
+Check(FlixSource.PlayerConfig("""var Q = {"t":"a}b","ssr":{"servers":[{"ref":"r"}]}};""") is { Token: "a}b" }, "the player config is read past a brace inside a string");
+Check(FlixSource.PlayAddress("""{"url":"/_stream?id=abc","type":"hls"}""") == "/_stream?id=abc", "the player API answers with the stream address");
+Check(FlixSource.PlayAddress("""{"error":"unavailable"}""") is null, "a player API that failed names no stream");
 
 Check(EmbedSources.Ids.Length == 9 && EmbedSources.Ids.Distinct().Count() == 9 && EmbedSources.Ids.All(id => EmbedSources.IsKnown(id)), "nine unique embed providers, all known");
 Check(EmbedSources.AllIds[0] == "flix" && EmbedSources.AllIds.Length == 10 && EmbedSources.AllIds.Distinct().Count() == 10, "flix leads the ten source ids without duplicates");
@@ -957,6 +963,9 @@ using (var art = typeof(Plugin).Assembly.GetManifestResourceStream("Jellystream.
 using (var page = new StreamReader(typeof(Plugin).Assembly.GetManifestResourceStream("Jellystream.Configuration.html")!))
 {
     var settings = page.ReadToEnd();
+    // The settings page must address this plugin by its own id, or every read and write is a 404.
+    Check(settings.Contains("'" + Plugin.PluginId + "'", StringComparison.Ordinal),
+        "the settings page addresses the plugin by its own id");
     Check(settings.Contains("id=\"audiobookEnabled\"", StringComparison.Ordinal) && settings.Contains("id=\"audiobookYouTube\"", StringComparison.Ordinal)
         && settings.Contains("config.AudiobookEnabled =", StringComparison.Ordinal) && settings.Contains("config.AudiobookYouTube =", StringComparison.Ordinal),
         "the settings page loads and saves the audiobook switches");
