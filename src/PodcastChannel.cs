@@ -174,6 +174,8 @@ public sealed class PodcastChannel(PodcastCatalog catalog, YtDlp tools, StreamRe
             Path = location.ToString(), Protocol = MediaProtocol.Http, Container = media.Container, IsRemote = true,
             Name = feed.Title + " · " + media.Container.ToUpperInvariant(),
             SupportsDirectPlay = true, SupportsDirectStream = true, SupportsTranscoding = true,
+            // Jellyfin needs a stream to play, or it refuses the request and playback stops at once.
+            MediaStreams = [media.Video ? SourceStreams.Video(media.Container) : SourceStreams.Audio(media.Container)],
             RunTimeTicks = episode.Seconds is > 0 ? TimeSpan.FromSeconds(episode.Seconds.Value).Ticks : null
         };
     }

@@ -1,5 +1,7 @@
 namespace Jellystream;
 
+using MediaBrowser.Model.Entities;
+
 public sealed record Anime(int Id, string Title, string[] Aliases, int? Year, string Overview, string? Image, int? Duration, bool IsAdult, string[] Genres,
     int? MalId = null, int? AvailableEpisodes = null);
 public sealed record CatalogPage(IReadOnlyList<Anime> Items, bool HasNext);
@@ -36,4 +38,39 @@ public sealed class CatalogDownException() : ProviderException("The music catalo
 public sealed class SourceStatusException(int status) : ProviderException($"Source returned HTTP {status}. Please try again later.")
 {
     public int Status { get; } = status;
+}
+
+// The streams of a file a source publishes itself, which Jellyfin fetches in place. Jellyfin picks a
+// stream to play and refuses the request when there is none, so such a source has to say what it
+// carries; without this it answers "the audio stream is null" and playback stops at once.
+public static class SourceStreams
+{
+    public static MediaStream Audio(string container) => new()
+    {
+        Type = MediaStreamType.Audio, Index = 0, Codec = AudioCodec(container),
+        Channels = 2, ChannelLayout = "stereo", IsDefault = true
+    };
+
+    public static MediaStream Video(string container) => new()
+    {
+        Type = MediaStreamType.Video, Index = 0, Codec = VideoCodec(container), IsDefault = true
+    };
+
+    // The codec of a container as Jellyfin names it. A container we do not know is taken as the
+    // common one for its kind, which is what a podcast feed most often publishes.
+    private static string AudioCodec(string container) => container.ToLowerInvariant() switch
+    {
+        "m4a" or "m4b" or "aac" => "aac",
+        "ogg" or "oga" => "vorbis",
+        "opus" => "opus",
+        "flac" => "flac",
+        "wav" => "wav",
+        _ => "mp3"
+    };
+
+    private static string VideoCodec(string container) => container.ToLowerInvariant() switch
+    {
+        "webm" => "vp9",
+        _ => "h264"
+    };
 }
