@@ -33,11 +33,18 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
     private static readonly Regex FrameLink = Rx(@"(?:\bsrc|data-src|data-api|data-url)\s*=\s*[""']([^""']+)[""']");
     // Some sites answer a hop with a bare JSON body naming the next page instead of an iframe.
     private static readonly Regex JsonHop = Rx(@"""(?:src|url|file)""\s*:\s*""([^""]+)""");
+    // A player that keeps the stream behind a small JSON API writes a config object into the page
+    // and puts the API beside it, addressed by the page's base.
+    private static readonly Regex PlayerConfigRx = Rx(@"\bQ\s*=\s*\{");
+    private static readonly Regex BaseHref = Rx(@"<base\s+href\s*=\s*[""']([^""']+)[""']");
     private static readonly Regex Packed = Rx(@"}\s*\(\s*'(.*?)'\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*'(.*?)'\.split\('\|'\)");
 
     // Player chains now run four or five pages deep, so the walk follows further than the two hops a
     // static FlixHQ page needed; the fan-out narrows at depth to keep a deeply nested page cheap.
     private const int MaxDepth = 5;
+
+    // A stream address found on a page, and whether it is a playlist.
+    private sealed record Candidate(Uri Url, bool Hls);
 
     public async Task<IReadOnlyList<ResolvedVideo>> ResolveAsync(Film film, int? season, int? episode, CancellationToken ct)
     {
@@ -54,7 +61,7 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
                 {
                     try
                     {
-                        if (await PlayerAsync(server.Link, referer, 0, ct) is not { } video) continue;
+                        if ((await PlayerAsync(server.Link, referer, 0, ct)).Video is not { } video) continue;
                         var known = video.Subtitles!.Select(s => s.Url).ToHashSet();
                         var extra = (await SubtitleIndexAsync(server.Link, referer, ct)).Where(s => !known.Contains(s.Url));
                         return [video with { Subtitles = Languages.Arrange(video.Subtitles!.Concat(extra)) }];
@@ -205,29 +212,187 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
     private static Dictionary<string, string> Referer(Uri page) => new() { ["Referer"] = page.AbsoluteUri };
 
 
-    public Task<ResolvedVideo?> PlayerAsync(Uri embed, Uri referer, int depth, CancellationToken ct) =>
-        PlayerAsync(embed, referer, depth, [], ct);
+    // The walk, with the reasons it found nothing: the page it reached and what that page said.
+    public async Task<(ResolvedVideo? Video, IReadOnlyList<string> Problems)> PlayerAsync(Uri embed, Uri referer, int depth, CancellationToken ct)
+    {
+        var problems = new List<string>();
+        var video = await WalkAsync(embed, referer, depth, [], problems, ct);
+        return (video, problems);
+    }
 
-    private async Task<ResolvedVideo?> PlayerAsync(Uri embed, Uri referer, int depth, HashSet<Uri> seen, CancellationToken ct)
+    private async Task<ResolvedVideo?> WalkAsync(Uri embed, Uri referer, int depth, HashSet<Uri> seen, List<string> problems, CancellationToken ct)
     {
         if (!seen.Add(embed)) return null;
         var (final, html) = await http.PageAsync(embed, ct, headers: Referer(referer), open: true);
-        if (FindMedia(html) is { } media)
+        var candidate = Media(html) ?? await PlayerApiAsync(final, html, ct, problems);
+        if (candidate is { } found)
         {
             var origin = final.GetLeftPart(UriPartial.Authority);
             var headers = new Dictionary<string, string> { ["Referer"] = origin + "/", ["Origin"] = origin };
-            var hls = media.AbsolutePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
-            if (hls && !(await http.TextAsync(media, ct, headers: headers, open: true)).TrimStart('﻿', ' ', '\r', '\n').StartsWith("#EXTM3U", StringComparison.Ordinal))
+            if (found.Hls && !(await http.TextAsync(found.Url, ct, headers: headers, open: true)).TrimStart('﻿', ' ', '\r', '\n').StartsWith("#EXTM3U", StringComparison.Ordinal))
                 throw new ProviderException("The player did not return an HLS playlist.");
-            return new ResolvedVideo(media, hls ? "HLS" : "MP4", headers, false, hls, FindSubtitles(html));
+            return new ResolvedVideo(found.Url, found.Hls ? "HLS" : "MP4", headers, false, found.Hls, FindSubtitles(html));
         }
-        if (depth >= MaxDepth) return null;
+        if (depth >= MaxDepth) { problems.Add($"{final} reached the end of the chain"); return null; }
         foreach (var frame in Hops(final, html).Distinct().Take(depth < 2 ? 4 : 2))
         {
-            try { if (await PlayerAsync(frame, final, depth + 1, seen, ct) is { } found) return found; }
+            try { if (await WalkAsync(frame, final, depth + 1, seen, problems, ct) is { } video) return video; }
             catch (Exception ex) when (ex is ProviderException or HttpRequestException or System.Text.RegularExpressions.RegexMatchTimeoutException or UriFormatException && !ct.IsCancellationRequested) { }
         }
+        problems.Add($"{final} named no playable video");
         return null;
+    }
+
+    // A stream address in the page itself.
+    private static Candidate? Media(string html)
+    {
+        if (FindMedia(html) is not { } url) return null;
+        return new Candidate(url, url.AbsolutePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Some players do not put the stream in the page: they carry a JSON config naming a signed token
+    // and the servers they offer, and a small JSON API beside them trades one server reference for the
+    // playable address. Servers that are not ready answer 502 and some answer with a list of adverts
+    // dressed as a playlist, so a server is only used when its playlist really holds the stream.
+    private async Task<Candidate?> PlayerApiAsync(Uri page, string html, CancellationToken ct, List<string> problems)
+    {
+        if (PlayerConfig(html) is not { } config) return null;
+        var href = BaseHref.Match(html);
+        var root = href.Success ? new Uri(page, href.Groups[1].Value) : page;
+        var api = new Uri(root, "api.php");
+        foreach (var reference in config.Servers)
+        {
+            var query = "?a=play&ref=" + Uri.EscapeDataString(reference) + "&t=" + Uri.EscapeDataString(config.Token);
+            string body;
+            try { body = await http.TextAsync(new Uri(api, query), ct, headers: Referer(page), open: true); }
+            catch (Exception ex) when (ex is ProviderException or HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+            {
+                problems.Add($"{api} did not hand over a stream ({ex.Message})");
+                continue;
+            }
+            if (PlayAddress(body) is not { } address || Http(page, address) is not { } stream) continue;
+            if (await PlaylistAsync(stream, page, ct) is { } playlist) return new Candidate(playlist, true);
+            problems.Add($"{stream} offered no playlist");
+        }
+        problems.Add($"{page} offered {config.Servers.Count} servers, none carried a stream");
+        return null;
+    }
+
+    // The address of the playlist itself: the one the player names, or, when it names a master, the
+    // first of its variants that really is a playlist. A master may list an advert server first.
+    private async Task<Uri?> PlaylistAsync(Uri stream, Uri page, CancellationToken ct)
+    {
+        string text;
+        try { text = await http.TextAsync(stream, ct, headers: Referer(page), open: true); }
+        catch (Exception ex) when (ex is ProviderException or HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested) { return null; }
+        if (!text.StartsWith("#EXTM3U", StringComparison.Ordinal)) return null;
+        if (!Hls.IsMaster(text)) return stream;
+        foreach (var variant in Variants(text, stream).Take(4))
+        {
+            try
+            {
+                var body = await http.TextAsync(variant, ct, headers: Referer(page), open: true);
+                if (!body.StartsWith("#EXTM3U", StringComparison.Ordinal)) continue;
+                // A playlist of adverts dressed as a playlist is refused: its first part is an image,
+                // not video, and the server behind it carries no stream.
+                if (!await CarriesVideoAsync(variant, body, page, ct)) continue;
+                return variant;
+            }
+            catch (Exception ex) when (ex is ProviderException or HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested) { }
+        }
+        return null;
+    }
+
+    // Whether the first part of a media playlist is really video rather than an advert.
+    private async Task<bool> CarriesVideoAsync(Uri playlist, string text, Uri page, CancellationToken ct)
+    {
+        var first = text.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0 && !l.StartsWith('#'));
+        if (first is null) return false;
+        if (!Uri.TryCreate(playlist, first, out var part)) return false;
+        try
+        {
+            using var response = await http.OpenAsync(part, true, ct, range: "bytes=0-15", headers: Referer(page), open: true);
+            if (!response.IsSuccessStatusCode) return false;
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+            if (bytes.Length < 8) return false;
+            // MPEG-TS starts with a sync byte; a fragmented MP4 starts with a box named ftyp, styp or moof.
+            return bytes[0] == 0x47 || (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70)
+                || (bytes[4] == 0x73 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70)
+                || (bytes[4] == 0x6D && bytes[5] == 0x6F && bytes[6] == 0x6F && bytes[7] == 0x66);
+        }
+        catch (Exception ex) when (ex is ProviderException or HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested) { return false; }
+    }
+
+    // The variants a master playlist lists, each one the address of a playlist of its own.
+    private static IEnumerable<Uri> Variants(string master, Uri playlist)
+    {
+        var lines = master.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (!lines[i].StartsWith("#EXT-X-STREAM-INF:", StringComparison.Ordinal)) continue;
+            for (var j = i + 1; j < lines.Length; j++)
+            {
+                var line = lines[j].Trim();
+                if (line.Length == 0) continue;
+                if (line.StartsWith('#')) break;
+                if (Uri.TryCreate(playlist, line, out var variant)) yield return variant;
+                break;
+            }
+        }
+    }
+
+    // The API answers with the address of the stream, relative to the site.
+    public static string? PlayAddress(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty("url", out var url) ? url.GetString() : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    // The player config is a JSON object written into the page; take it by matching braces so that
+    // nested objects and strings inside it do not confuse the reader.
+    private static string? JsonObject(string html, string name)
+    {
+        var match = Rx(@"\b" + name + @"\s*=\s*\{").Match(html);
+        if (!match.Success) return null;
+        var start = html.IndexOf('{', match.Index);
+        var depth = 0; var quoted = false; var escaped = false;
+        for (var i = start; i < html.Length; i++)
+        {
+            var c = html[i];
+            if (quoted)
+            {
+                if (escaped) escaped = false;
+                else if (c == '\\') escaped = true;
+                else if (c == '"') quoted = false;
+                continue;
+            }
+            if (c == '"') { quoted = true; continue; }
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0) return html[start..(i + 1)];
+        }
+        return null;
+    }
+
+    // The signed token and the server references the page offers.
+    public static (string Token, IReadOnlyList<string> Servers)? PlayerConfig(string html)
+    {
+        if (JsonObject(html, "Q") is not { } json) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("t", out var token) || token.GetString() is not { Length: > 0 } signed) return null;
+            if (!root.TryGetProperty("ssr", out var ssr) || !ssr.TryGetProperty("servers", out var servers)) return null;
+            var references = new List<string>();
+            foreach (var server in servers.EnumerateArray())
+                if (server.TryGetProperty("ref", out var value) && value.GetString() is { Length: > 0 } reference) references.Add(reference);
+            return references.Count == 0 ? null : (signed, references);
+        }
+        catch (JsonException) { return null; }
     }
 
     // The next page a player points at: whatever the iframes link (however they spell the attribute)
