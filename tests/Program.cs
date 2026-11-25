@@ -301,6 +301,29 @@ var packed = """<script>eval(function(p,a,c,k,e,d){return p}('0 1={2:"3://4.5/6/
 Check(FlixSource.Unpack(packed).Single() == "var cfg={file:\"https://cdn.example/hls/master.m3u8\",label:\"HD\"};", "packed player scripts unpack as plain text");
 Check(FlixSource.FindMedia(packed)?.AbsoluteUri == "https://cdn.example/hls/master.m3u8", "player stream found inside a packed script");
 Check(FlixSource.FindMedia("""file:"https://127.0.0.1/x.m3u8" """) is null, "player stream on a private address is ignored");
+// QualityRank: one ranking for every label a source uses. A label that claims no height must rank
+// last rather than first, or a transport name would beat a real 1080p claim.
+Check(QualityRank.Score("1080p") == 1080 && QualityRank.Score("720p60") == 720 && QualityRank.Score("up to 1080p") == 1080, "height labels parse to their pixels");
+Check(QualityRank.Score("4K") == 2160 && QualityRank.Score("8K") == 4320, "4K and 8K name a height without digits to read");
+Check(QualityRank.Score("FHD") == 1080 && QualityRank.Score("HD") == 720 && QualityRank.Score("SD") == 480, "letter acronyms map to their heights");
+Check(QualityRank.Score("HLS") == 0 && QualityRank.Score("MP4") == 0 && QualityRank.Score(null) == 0 && QualityRank.Score("   ") == 0, "a transport label or no label claims no height");
+ResolvedVideo Variant(string quality, int order) => new(new Uri($"https://cdn.example/{order}.mp4"), quality, new Dictionary<string, string>(), false);
+var ladder = new[] { Variant("HLS", 0), Variant("480p", 1), Variant("1080p", 2) };
+Check(QualityRank.Best(ladder).Quality == "1080p", "the tallest claim is played first");
+Check(QualityRank.Best(new[] { Variant("HLS", 0), Variant("480p", 1) }).Quality == "480p", "a claim of no height loses to any real claim");
+Check(QualityRank.Best(new[] { Variant("720p", 0), Variant("720p", 1) }).Url.AbsolutePath == "/0.mp4", "equal claims keep source order");
+Check(QualityRank.Best(new[] { Variant("HLS", 0) }).Quality == "HLS", "a transport label still plays when it is all there is");
+Check(!QualityRank.Rated("FlixHQ · HLS · 2 subtitle tracks") && QualityRank.Rated("FlixHQ · 1080p · 2 subtitle tracks"), "the middle segment of a display name is read as the quality");
+Check(!QualityRank.Rated("HLS") && QualityRank.Rated("1080p"), "a lone transport label is not a height and a lone height is");
+Check(QualityRank.Relabel("FlixHQ · HLS · 2 subtitle tracks", 720) == "FlixHQ · 720p · 2 subtitle tracks", "the probed height replaces the transport segment and keeps the rest");
+Check(QualityRank.Relabel("FlixHQ · HLS", 480) == "FlixHQ · 480p", "the probed height replaces the transport when nothing trails it");
+var variants = FlixSource.FindMediaAll("""[{file:"https://cdn.example/480.mp4",label:"480p"},{file:"https://cdn.example/1080.mp4",label:"1080p"}]""");
+Check(variants.Count == 2 && variants[0].Label == "480p" && variants[1].Label == "1080p" && !variants[0].Hls, "every variant is returned with the label its own list gives it");
+var playlist = FlixSource.FindMediaAll("""{file:"https://cdn.example/hls/720.m3u8",label:"720p"}""");
+Check(playlist.Count == 1 && playlist[0].Hls && playlist[0].Label == "720p", "an HLS variant carries both its label and its transport");
+Check(FlixSource.FindMediaAll("""file:"https://cdn.example/a.mp4" file:"https://cdn.example/b.m3u8" """)[0].Url.AbsolutePath == "/b.m3u8", "an HLS stream is still preferred over an MP4");
+Check(FlixSource.FindMediaAll("""file:"https://cdn.example/same.mp4" file:"https://cdn.example/same.mp4" """).Count == 1, "the same address listed twice is offered once");
+Check(FlixSource.FindMediaAll("""file:"https://127.0.0.1/x.mp4" """).Count == 0, "variants on a private address are not offered");
 Check(FlixSource.FindSubtitles("""tracks:[{file:"https:\/\/s.example\/en.vtt",label:"English"},{file:"https://s.example/t.vtt",label:"thumbnails"}]""").Single().Language == "en", "player subtitle tracks parsed, thumbnails skipped");
 Check(FlixSource.FindSubtitles("""tracks:[{file:"https://s.example/en.vtt",label:" "}]""").Count == 0, "player subtitle tracks without a label are skipped");
 Check(FlixSource.ParseSubtitleIndex("""[{"file":"https://s.example/es.srt","label":"Spanish"},{"src":"https://s.example/x.vtt","label":""}]""").Single().Language == "es", "subtitle index parsed");
