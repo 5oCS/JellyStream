@@ -51,16 +51,16 @@ public sealed class EmbedSources(FlixSource flix)
         var provider = Providers.FirstOrDefault(p => p.Id == source)
             ?? throw new ProviderException("Unknown movie source " + source + ".");
         var url = provider.Url(film, season, episode);
-        var (video, problems) = await flix.PlayerAsync(url, url, 0, ct);
-        if (video is null)
+        var (videos, problems) = await flix.PlayerAsync(url, url, 0, ct);
+        if (videos.Count == 0)
         {
             // Say why the walk found nothing, so a source that stops working names its own cause
             // instead of leaving the viewer with a bare complaint. The deepest failure comes first.
             var reason = problems.Count == 0 ? "" : " (" + problems[0] + ")";
             throw new ProviderException(provider.Label + " returned no playable video" + reason + ".");
         }
-        var known = video.Subtitles!.Select(s => s.Url).ToHashSet();
+        var known = videos.SelectMany(v => v.Subtitles ?? []).Select(s => s.Url).ToHashSet();
         var extra = (await flix.SubtitleIndexAsync(url, url, ct)).Where(s => !known.Contains(s.Url));
-        return [video with { Subtitles = Languages.Arrange(video.Subtitles!.Concat(extra)) }];
+        return videos.Select(v => v with { Subtitles = Languages.Arrange((v.Subtitles ?? []).Concat(extra)) }).ToArray();
     }
 }

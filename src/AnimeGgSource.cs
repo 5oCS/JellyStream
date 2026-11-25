@@ -60,7 +60,7 @@ public sealed class AnimeGgSource(SafeHttp http) : IAnimeSource
         var result = Matches(array, "\\{[^}]*?file:\\s*\"([^\"]+)\"[^}]*?label:\\s*\"([^\"]+)\"[^}]*\\}")
             .Select(m => new ResolvedVideo(new Uri(Origin, WebUtility.HtmlDecode(m.Groups[1].Value)), m.Groups[2].Value,
                 new Dictionary<string, string> { ["Referer"] = Origin.AbsoluteUri }, true))
-            .OrderByDescending(v => int.TryParse(Regex.Match(v.Quality, @"\d+").Value, out var n) ? n : 0).ToArray();
+            .OrderByDescending(v => QualityRank.Score(v.Quality)).ToArray();
         foreach (var video in result) SafeHttp.Validate(video.Url, true);
         if (result.Length == 0) throw new ProviderException("AnimeGG did not return a playable video. The source adapter may need an update.");
         return result;

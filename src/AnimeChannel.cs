@@ -203,15 +203,18 @@ public sealed class AnimeChannel(AniListCatalog catalog, SourceRegistry sources,
         if (!AniListCatalog.IsAllowed(anime)) throw new ProviderException("This title is hidden by the content filter.");
         var user = auth.UserId;
         var key = user.ToString("N") + id;
+        // The address the viewer's player will fetch subtitles from, captured from this request so the
+        // prefetch below does not see a null context once the request has finished.
+        var origin = context.Request.Scheme + "://" + context.Request.Host.Value;
         // Only a real start prepares the next episode, not opening an episode's page.
         var starting = context.Request.Path.Value?.Contains("/PlaybackInfo", StringComparison.OrdinalIgnoreCase) == true;
         if (PreparesNext && Ready.TryGetValue<Prepared>(key, out var ready) && SourceRegistry.IsEnabled(ready!.Provider) && relay.Holds(ready.Source.Path))
         {
-            if (starting) PrepareNext(user, parts[1], anime, episode);
+            if (starting) PrepareNext(user, parts[1], anime, episode, origin);
             return [ready.Source];
         }
-        var source = await PlayAsync(user, parts[1], anime, episode, EpisodeNumber(id), ct);
-        if (starting) PrepareNext(user, parts[1], anime, episode);
+        var source = await PlayAsync(user, parts[1], anime, episode, EpisodeNumber(id), ct, origin);
+        if (starting) PrepareNext(user, parts[1], anime, episode, origin);
         return [source.Source];
     }
 
@@ -225,19 +228,22 @@ public sealed class AnimeChannel(AniListCatalog catalog, SourceRegistry sources,
     private static readonly SemaphoreSlim Preparing = new(1, 1);
     public static bool PreparesNext => Plugin.Instance?.Configuration.PrepareNextEpisode != false;
 
-    private async Task<Prepared> PlayAsync(Guid user, string scope, Anime anime, string episode, decimal? number, CancellationToken ct)
+    private async Task<Prepared> PlayAsync(Guid user, string scope, Anime anime, string episode, decimal? number, CancellationToken ct, string? origin = null)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var (played, videos) = await sources.ResolveWithFallbackAsync(anime, number, episode, ct, listedExact: ListedExact(scope, anime.Id, episode));
         var provider = SourceRegistry.Split(played).Provider;
-        var source = await relay.MediaSourceAsync(user, videos[0], $"{sources.Name(played)} · {videos[0].Quality} · English subtitles",
-            token => sources.ResolveAsync(played, token), () => Plugin.Allows(user) && SourceRegistry.IsEnabled(provider) && AniListCatalog.IsAllowed(anime), ct);
+        // AnimeGg already sorts by rank; the other anime sources do not, so the pick happens here
+        // rather than trusting the order each provider happened to return.
+        var best = QualityRank.Best(videos);
+        var source = await relay.MediaSourceAsync(user, best, $"{sources.Name(played)} · {best.Quality} · English subtitles",
+            token => sources.ResolveAsync(played, token), () => Plugin.Allows(user) && SourceRegistry.IsEnabled(provider) && AniListCatalog.IsAllowed(anime), ct, origin);
         // Timed only when the chosen site played it: a fallback's time says little about either site.
         if (played == episode) sources.Health.Started(provider, clock.Elapsed);
         return new(source, provider);
     }
 
-    private void PrepareNext(Guid user, string scope, Anime anime, string episode)
+    private void PrepareNext(Guid user, string scope, Anime anime, string episode, string origin)
     {
         if (!PreparesNext) return;
         _ = Task.Run(async () =>
@@ -250,7 +256,7 @@ public sealed class AnimeChannel(AniListCatalog catalog, SourceRegistry sources,
                 var nextKey = SourceRegistry.Key(SourceRegistry.Split(episode).Provider, next.Id);
                 var key = user.ToString("N") + $"episode/{scope}/{anime.Id}/{nextKey}";
                 if (Ready.TryGetValue(key, out _)) return;
-                var prepared = await PlayAsync(user, scope, anime, nextKey, next.Number, limit.Token);
+                var prepared = await PlayAsync(user, scope, anime, nextKey, next.Number, limit.Token, origin);
                 Ready.Set(key, prepared, new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) });
             }
             catch (Exception ex) when (ex is ProviderException or HttpRequestException or OperationCanceledException or IOException

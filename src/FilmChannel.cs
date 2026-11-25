@@ -170,15 +170,18 @@ public sealed class FilmChannel(TmdbCatalog catalog, FlixSource flix, EmbedSourc
         };
         var user = auth.UserId;
         var key = user.ToString("N") + id;
+        // The address the viewer's player will fetch subtitles from, captured from this request so the
+        // prefetch below does not see a null context once the request has finished.
+        var origin = context.Request.Scheme + "://" + context.Request.Host.Value;
         // Only a real start prepares the next episode, not opening an episode's page.
         var starting = context.Request.Path.Value?.Contains("/PlaybackInfo", StringComparison.OrdinalIgnoreCase) == true;
         if (AnimeChannel.PreparesNext && Ready.TryGetValue<MediaSourceInfo>(key, out var ready) && relay.Holds(ready!.Path))
         {
-            if (starting) PrepareNext(user, id, target.Film, target.Season, target.Episode);
+            if (starting) PrepareNext(user, id, target.Film, target.Season, target.Episode, origin);
             return [ready];
         }
-        var source = await PlayAsync(user, target.Film, target.Season, target.Episode, ct);
-        if (starting) PrepareNext(user, id, target.Film, target.Season, target.Episode);
+        var source = await PlayAsync(user, target.Film, target.Season, target.Episode, ct, origin);
+        if (starting) PrepareNext(user, id, target.Film, target.Season, target.Episode, origin);
         return [source];
     }
 
@@ -203,7 +206,7 @@ public sealed class FilmChannel(TmdbCatalog catalog, FlixSource flix, EmbedSourc
     // the caller giving up is not such a failure.
     private static bool IsSiteFailure(Exception ex) => ex is HttpRequestException or IOException or OperationCanceledException or ProviderException;
 
-    private async Task<MediaSourceInfo> PlayAsync(Guid user, Film film, int? season, int? episode, CancellationToken ct)
+    private async Task<MediaSourceInfo> PlayAsync(Guid user, Film film, int? season, int? episode, CancellationToken ct, string? origin = null)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var candidates = Candidates();
@@ -258,15 +261,17 @@ public sealed class FilmChannel(TmdbCatalog catalog, FlixSource flix, EmbedSourc
             throw new ProviderException("No source could play this title right now ("
                 + string.Join(", ", failures.Distinct().Take(6)) + "). Please try again later.");
         var played = chosen;
-        var first = videos[0];
+        // The sources answer in whatever order the site listed them; the tallest claim wins, not
+        // the first one that happens to arrive.
+        var first = QualityRank.Best(videos);
         var subtitles = first.Subtitles?.Count ?? 0;
         var source = await relay.MediaSourceAsync(user, first, $"{VideoHealth.Label(played)} · {first.Quality}" + (subtitles > 0 ? $" · {subtitles} subtitle tracks" : ""),
-            token => ResolveSourceAsync(played, film, season, episode, token), () => Plugin.Allows(user) && IsAvailable, ct);
+            token => ResolveSourceAsync(played, film, season, episode, token), () => Plugin.Allows(user) && IsAvailable, ct, origin);
         health.Started(played, clock.Elapsed);
         return source;
     }
 
-    private void PrepareNext(Guid user, string id, Film film, int? season, int? episode)
+    private void PrepareNext(Guid user, string id, Film film, int? season, int? episode, string origin)
     {
         if (!AnimeChannel.PreparesNext || season is not { } s || episode is not { } e || id.Split('/') is not ["ep", var scope, var show, _, _]) return;
         _ = Task.Run(async () =>
@@ -281,7 +286,7 @@ public sealed class FilmChannel(TmdbCatalog catalog, FlixSource flix, EmbedSourc
                 if (nextSeason == 0) return;
                 var key = user.ToString("N") + $"ep/{scope}/{show}/{nextSeason}/{nextEpisode}";
                 if (Ready.TryGetValue(key, out _)) return;
-                var prepared = await PlayAsync(user, film, nextSeason, nextEpisode, limit.Token);
+                var prepared = await PlayAsync(user, film, nextSeason, nextEpisode, limit.Token, origin);
                 Ready.Set(key, prepared, new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) });
             }
             catch (Exception ex) when (ex is ProviderException or HttpRequestException or OperationCanceledException or IOException
