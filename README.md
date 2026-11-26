@@ -259,6 +259,35 @@ lint of the workflows. Every Monday it also loads the plugin on the newest Jelly
 breaking release shows up before a server updates into it. Everything that parses a
 third-party page is fuzzed on every pull request and for an hour every Sunday.
 
+## Versioning
+
+`<Version>` in `src/Jellystream.csproj` is the single source of truth: `package.py`
+copies it into `meta.json`, and `release.yml` refuses a tag that does not read
+`v$version`.
+
+The value has to be four numbers, `major.minor.build.revision`. Jellyfin reads both
+the repository manifest and `meta.json` with `System.Version.TryParse`, and a SemVer
+prerelease suffix such as `0.14.11-rc1` does not parse — `PluginManager` falls back to
+`0.0.0.1`, so the plugin reads as permanently out of date and is offered every
+version forever.
+
+That format has no prerelease slot, so the revision carries it. The first candidate of
+`0.14.11` is `0.14.11.1`, the next is `0.14.11.2`, and a final release must take a
+revision above every candidate it replaces: `0.14.11` parses with an unspecified
+revision, which ranks *below* `0.14.11.1`, so a final published as `0.14.11` would
+never be offered to a server already running the candidate.
+
+Every push to `testing` republishes a rolling pre-release under the `test-build` tag
+carrying that build's zip and manifest:
+
+```
+https://github.com/5oCS/JellyStream/releases/download/test-build/manifest.json
+```
+
+It is a pre-release, so `releases/latest` keeps serving the official manifest. The
+tag is `test-build` rather than `testing` because a tag sharing the branch's name
+makes `git checkout testing` ambiguous for everyone who fetches it.
+
 ## Credits
 
 The AnimeGG and AnimeHeaven adapters are adapted from the MIT-licensed
