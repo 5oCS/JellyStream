@@ -1088,6 +1088,96 @@ Check(InternetArchiveCatalog.ReadEbookFiles(System.Text.Json.JsonDocument.Parse(
  "files":[{"name":"a.epub","format":"EPUB","size":"10"}]}
 """).RootElement).Count == 0, "the file reader itself refuses a lending item, not only its caller");
 
+// Path E: the offline shelf. A folder is indexed, an EPUB is read for its own title and author, and
+// nothing about the walk is trusted with more than it was given.
+Check(LocalFolderCatalog.SourceId == "local" && LocalFolderCatalog.Root("") is null
+    && LocalFolderCatalog.Root("  ") is null && LocalFolderCatalog.Root("relative/books") is null
+    && LocalFolderCatalog.Root("/srv/books/") == "/srv/books" && LocalFolderCatalog.Root("/srv/x/../books") == "/srv/books",
+    "the ebook folder follows the same rule as the music save folder");
+Check(LocalFolderCatalog.IsBook("a.EPUB") && LocalFolderCatalog.IsBook("b.pdf") && LocalFolderCatalog.IsBook("c.mobi")
+    && !LocalFolderCatalog.IsBook("d.epub.exe") && !LocalFolderCatalog.IsBook("cover.jpg") && !LocalFolderCatalog.IsBook("e"),
+    "an extension decides a book, case-insensitively");
+Check(LocalFolderCatalog.Index("") is { Count: 0 } && LocalFolderCatalog.Index("/no/such/folder-" + Guid.NewGuid().ToString("N")) is { Count: 0 },
+    "an empty or missing folder indexes nothing rather than throwing");
+
+// A real EPUB: the container names the package document, and the package document names the book.
+static string WriteEpub(string folder, string file, string? title, string[] authors)
+{
+    var path = Path.Combine(folder, file);
+    using var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Create);
+    void Entry(string name, string xml)
+    {
+        var entry = zip.CreateEntry(name);
+        using var writer = new StreamWriter(entry.Open());
+        writer.Write(xml);
+    }
+    Entry("META-INF/container.xml", """
+        <?xml version="1.0"?>
+        <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+          <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+        </container>
+        """);
+    var body = string.Concat(authors.Select(a => $"<dc:creator>{a}</dc:creator>"));
+    Entry("OEBPS/content.opf", $"""
+        <?xml version="1.0"?>
+        <package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
+          <metadata>{(title is null ? "" : $"<dc:title>{title}</dc:title>")}{body}</metadata>
+        </package>
+        """);
+    return path;
+}
+
+var bookRoot = Path.Combine(Path.GetTempPath(), "jellystream-books-" + Guid.NewGuid().ToString("N"));
+try
+{
+    Directory.CreateDirectory(Path.Combine(bookRoot, "nested"));
+    WriteEpub(bookRoot, "The Left Hand of Darkness.epub", "The Left Hand of Darkness", ["Ursula K. Le Guin"]);
+    WriteEpub(bookRoot, "no-metadata.epub", null, []);
+    File.WriteAllText(Path.Combine(bookRoot, "9780441478125.pdf"), "%PDF-1.4 not really a pdf");
+    File.WriteAllText(Path.Combine(bookRoot, "cover.jpg"), "not a book");
+    File.WriteAllText(Path.Combine(bookRoot, "nested", "Flatland.epub"), "a whole zip this is not");
+    // A file past the bound is not a book whatever its extension says.
+    using (var big = File.Create(Path.Combine(bookRoot, "huge.txt"))) big.SetLength(600L * 1024 * 1024);
+
+    var shelf = LocalFolderCatalog.Index(bookRoot);
+    var names = shelf.Select(b => b.Id).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+    Check(names.SequenceEqual(["9780441478125.pdf", "The Left Hand of Darkness.epub", "nested/Flatland.epub", "no-metadata.epub"]),
+        "subfolders are indexed and non-books and oversized files are not: " + string.Join(", ", names));
+    var real = shelf.Single(b => b.Id == "The Left Hand of Darkness.epub");
+    Check(real.Title == "The Left Hand of Darkness" && real.Authors.SequenceEqual(["Ursula K. Le Guin"]),
+        "an EPUB's own title and author are read out of the archive: " + real.Title + " / " + string.Join("; ", real.Authors));
+    Check(real.Source == "local" && real.Files.Count == 1 && real.Files[0].Format == "EPUB"
+        && real.Files[0].Url.Scheme == "file" && real.Files[0].Url.AbsolutePath.EndsWith(".epub", StringComparison.Ordinal),
+        "a local book resolves to its own file: " + real.Files[0].Url);
+    Check(shelf.Single(b => b.Id == "9780441478125.pdf").Title == "9780441478125",
+        "a format with no metadata of its own is shown by its file name");
+    Check(shelf.Single(b => b.Id == "no-metadata.epub").Title == "no-metadata",
+        "an EPUB that will not open falls back to its file name rather than failing the shelf");
+    Check(shelf.Single(b => b.Id == "nested/Flatland.epub").Title == "Flatland",
+        "a corrupt EPUB in a subfolder is a filename, not an exception");
+    Check(shelf.All(b => b.Files[0].Size < 500L * 1024 * 1024), "the size bound is applied before a file is offered");
+
+    // A symlink points out of the folder the operator chose to share, so it is not followed.
+    try
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "jellystream-outside-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "Secret.epub"), "x");
+        Directory.CreateSymbolicLink(Path.Combine(bookRoot, "escape"), outside);
+        Check(!LocalFolderCatalog.Index(bookRoot).Any(b => b.Id.Contains("Secret", StringComparison.Ordinal)),
+            "a symlink out of the folder is not walked into");
+        Directory.Delete(outside, true);
+    }
+    catch (Exception e) when (e is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+    {
+        Check(true, "symbolic links unavailable here, walk-safety check skipped");
+    }
+}
+finally
+{
+    if (Directory.Exists(bookRoot)) Directory.Delete(bookRoot, true);
+}
+
 using (var art = typeof(Plugin).Assembly.GetManifestResourceStream("Jellystream.Assets.audiobook.png")!)
 {
     var magic = new byte[4];

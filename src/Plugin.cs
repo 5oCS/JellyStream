@@ -69,6 +69,9 @@ public sealed class Configuration : BasePluginConfiguration
     // When a feed publishes no file of its own, an episode may play from YouTube instead. yt-dlp and deno are
     // the music YouTube tools above (YtDlp.Ready follows MusicEnabled, MusicYouTube and MusicAllowLossy).
     public bool PodcastYouTube { get; set; }
+    // A folder of EPUBs and PDFs indexed as books; empty turns it off. This is the offline shelf:
+    // nothing is fetched, and the folder is only ever read.
+    public string BookFolder { get; set; } = "";
     // Starred albums are saved here as FLAC files for a normal music library; empty turns it off.
     public string MusicLibraryFolder { get; set; } = "";
     // Optional: Last.fm's similar artists when ListenBrainz has none.

@@ -220,7 +220,9 @@
 
       <!-- Ebooks tab -->
       <div class="jellystreamTabPanel" id="tab-ebooks" role="tabpanel">
-        <div class="fieldDescription">Ebook settings will be added here when ebook support is implemented.</div>
+        <div class="inputContainer"><label class="inputLabel" for="bookFolder">Ebook folder</label>
+          <input is="emby-input" type="text" id="bookFolder" autocomplete="off" spellcheck="false" placeholder="/media/books">
+          <div class="fieldDescription">A folder of EPUB, PDF, DJVU, MOBI, AZW3, FB2 and plain-text books, indexed so they can be browsed and searched. Nothing is fetched from anywhere: this is the offline shelf, and the folder is only ever read. EPUB files carry their own title and author, so those are shown as they are; other formats are shown by their file name. Subfolders are included, but links pointing outside the folder are not followed, and a folder is capped at 2,000 books or 500 MB per file so a whole disk is not walked. Leave empty to index nothing.</div></div>
       </div>
 
       <p id="jellystreamStatus" role="status">Loading settings…</p>
@@ -312,6 +314,7 @@
             page.querySelector('#podcastCurated').checked = config.PodcastCurated !== false;
             page.querySelector('#podcastYouTube').checked = config.PodcastYouTube === true;
             page.querySelector('#podcastFeeds').value = (config.PodcastFeeds || []).join('\n');
+            page.querySelector('#bookFolder').value = config.BookFolder || '';
             applyOrder(page.querySelector('#playOrder'), config.MusicPlayOrder);
             applyOrder(page.querySelector('#searchOrder'), config.MusicSearchOrder);
             applyOrder(page.querySelector('#filmOrder'), config.FilmSourceOrder);
@@ -389,6 +392,7 @@
           config.PodcastCurated = page.querySelector('#podcastCurated').checked;
           config.PodcastYouTube = page.querySelector('#podcastYouTube').checked;
           config.PodcastFeeds = page.querySelector('#podcastFeeds').value.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+          config.BookFolder = page.querySelector('#bookFolder').value.trim();
           // Switching YouTube off is how to keep to FLAC now; songs already kept from it still play.
           config.MusicAllowLossy = true;
           config.MusicPlayOrder = Array.from(page.querySelector('#playOrder').children, item => item.dataset.source);
