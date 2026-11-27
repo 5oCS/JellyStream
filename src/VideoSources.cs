@@ -27,7 +27,7 @@ public static class TestLimit
 // playback goes straight to another site. Also how long each takes to start an episode, so the fastest is tried first.
 public sealed class VideoHealth(ILogger<VideoHealth>? logger = null)
 {
-    public static readonly string[] Sources = [.. SourceRegistry.Order, "flix", .. EmbedSources.Ids];
+    public static readonly string[] Sources = [.. SourceRegistry.Order, "flix", DispatcharrSource.Id, .. EmbedSources.Ids];
     private static readonly TimeSpan Slow = TimeSpan.FromSeconds(60);
     private readonly ConcurrentDictionary<string, CatalogBreaker> breakers = new();
     private readonly ConcurrentDictionary<string, double> speeds = new();
@@ -95,7 +95,7 @@ public sealed record VideoCheck(string? Problem, bool Outage)
 }
 
 // The whole way to a playable video, for a title every site carries, so a check that passes means playing works.
-public sealed class VideoChecks(IEnumerable<IAnimeSource> anime, TmdbCatalog tmdb, FlixSource flix, EmbedSources embeds)
+public sealed class VideoChecks(IEnumerable<IAnimeSource> anime, TmdbCatalog tmdb, FlixSource flix, EmbedSources embeds, DispatcharrSource dispatcharr)
 {
     private static readonly Anime Frieren = new(154587, "Sousou no Frieren", ["Frieren: Beyond Journey's End", "Frieren"], 2023, "", null, 24, false, [], MalId: 52991, AvailableEpisodes: 28);
     private static readonly Film Inception = new(27205, FilmKind.Movie, "Inception", 2010, "", null, 148, false);
@@ -115,6 +115,10 @@ public sealed class VideoChecks(IEnumerable<IAnimeSource> anime, TmdbCatalog tmd
                 case "flix":
                     flix.Forget(Inception);
                     return (await flix.ResolveAsync(Inception, null, null, limit.Token)).Count > 0 ? VideoCheck.Works : new("no video was found", false);
+                case DispatcharrSource.Id:
+                    // Goes all the way to a playable file in the operator's own library, so a pass
+                    // means playing works rather than merely that the catalogue answered.
+                    return await dispatcharr.TestAsync(limit.Token);
                 default:
                     // A film embed site is checked by the way to a film on it; the episode path is
                     // covered by its address format, which the tests pin down.
@@ -150,7 +154,7 @@ public sealed class VideoProbe(VideoHealth health, VideoChecks checks, ILogger<V
                 {
                     var status = health.Breaker(source).Status(DateTime.UtcNow);
                     if (status.State == SourceHealth.Healthy || status.NextCheck > DateTime.UtcNow) continue;
-                    if ((source == "flix" || EmbedSources.Ids.Contains(source)) ? !FilmChannel.IsSourceEnabled(source) : !SourceRegistry.IsEnabled(source, config)) continue;
+                    if (EmbedSources.IsKnown(source) ? !FilmChannel.IsSourceEnabled(source) : !SourceRegistry.IsEnabled(source, config)) continue;
                     // Each site on its own: one that breaks in a new way must not stop the others being checked.
                     VideoCheck check;
                     try { check = await checks.CheckAsync(source, stop); }

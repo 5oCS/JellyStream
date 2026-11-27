@@ -37,10 +37,13 @@ public sealed class EmbedSources(FlixSource flix)
             "https://player.smashystream.com/playere.php?tmdb={0}&season={1}&episode={2}")
     ];
     public static readonly string[] Ids = [.. Providers.Select(p => p.Id)];
-    public static readonly string[] AllIds = ["flix", .. Ids];
+    // Dispatcharr is not an embed site — it is the operator's own server — but it joins the same
+    // ordered list so one switch and one set of arrows governs every film source.
+    public static readonly string[] AllIds = ["flix", .. Ids, DispatcharrSource.Id];
 
-    public static bool IsKnown(string source) => source == "flix" || Ids.Contains(source);
+    public static bool IsKnown(string source) => source == "flix" || source == DispatcharrSource.Id || Ids.Contains(source);
     public static string LabelOf(string source) => source == "flix" ? "FlixHQ"
+        : source == DispatcharrSource.Id ? DispatcharrSource.Label
         : Providers.FirstOrDefault(p => p.Id == source)?.Label ?? source;
     public static string[] Ordered(Configuration? config) => Plugin.Ordered(config?.FilmSourceOrder, AllIds);
 

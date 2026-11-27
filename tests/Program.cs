@@ -336,7 +336,9 @@ Check(FlixSource.PlayAddress("""{"url":"/_stream?id=abc","type":"hls"}""") == "/
 Check(FlixSource.PlayAddress("""{"error":"unavailable"}""") is null, "a player API that failed names no stream");
 
 Check(EmbedSources.Ids.Length == 9 && EmbedSources.Ids.Distinct().Count() == 9 && EmbedSources.Ids.All(id => EmbedSources.IsKnown(id)), "nine unique embed providers, all known");
-Check(EmbedSources.AllIds[0] == "flix" && EmbedSources.AllIds.Length == 10 && EmbedSources.AllIds.Distinct().Count() == 10, "flix leads the ten source ids without duplicates");
+Check(EmbedSources.AllIds[0] == "flix" && EmbedSources.AllIds.Length == 11 && EmbedSources.AllIds.Distinct().Count() == 11, "flix leads the eleven source ids without duplicates");
+Check(EmbedSources.IsKnown(DispatcharrSource.Id) && EmbedSources.AllIds[^1] == DispatcharrSource.Id && EmbedSources.LabelOf(DispatcharrSource.Id) == "Dispatcharr",
+    "Dispatcharr joins the film sources at the end and is known");
 Check(!EmbedSources.IsKnown("tmdb") && !EmbedSources.IsKnown("embed.su") && !EmbedSources.IsKnown("multiembed") && !EmbedSources.IsKnown("2embed.stream"), "TMDB and stale sources are not movie sources");
 Check(VideoHealth.Label("flix") == "FlixHQ" && VideoHealth.Label("vidfast") == "VidFast" && VideoHealth.Label("2embed-cc") == "2embed.cc" && VideoHealth.Label("tmdb") == "tmdb",
     "source labels name the site users recognise");
@@ -363,13 +365,46 @@ Contained(() => EmbedSources.Providers.Single(p => p.Id == "vidfast").Url(tvShow
 Contained(() => EmbedSources.Providers.Single(p => p.Id == "2embed-cc").Url(tvShow, 2, null), "an episode without an episode number is refused");
 Check(EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] })[0] == "smashystream"
     && !EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Contains("nope")
-    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] })[^1] == "moviesapi-to"
-    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Distinct().Count() == 10
-    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Length == 10,
+    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] })[^1] == DispatcharrSource.Id
+    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Distinct().Count() == 11
+    && EmbedSources.Ordered(new Configuration { FilmSourceOrder = ["smashystream", "nope"] }).Length == 11,
     "a saved film order keeps its head, drops unknown sources and appends the rest in table order");
 Check(EmbedSources.Ordered(null).SequenceEqual(EmbedSources.AllIds), "without a saved order the table order is used");
 Check(new Configuration().FilmSourceOrder.Length == 0 && new Configuration().FilmSourceOff.Length == 0, "no film source is ordered or switched off by default");
-Check(VideoHealth.Sources.Length == SourceRegistry.Order.Length + 1 + EmbedSources.Ids.Length && EmbedSources.Ids.All(VideoHealth.Sources.Contains), "every embed source reports health");
+Check(VideoHealth.Sources.Length == SourceRegistry.Order.Length + 2 + EmbedSources.Ids.Length && EmbedSources.Ids.All(VideoHealth.Sources.Contains)
+    && VideoHealth.Sources.Contains(DispatcharrSource.Id), "every embed source and Dispatcharr reports health");
+
+// Dispatcharr: the configured address is the one destination allowed to be a private one, and only
+// for as long as it is the address that was configured.
+Check(SafeHttp.Origin("192.168.99.11:9191") is { Scheme: "http", Host: "192.168.99.11", Port: 9191 },
+    "a bare LAN address is taken as http on the port given");
+Check(SafeHttp.Origin("  http://192.168.99.11:9191/vod/  ") is { Host: "192.168.99.11", Port: 9191, AbsolutePath: "/" },
+    "a path on the configured address is dropped, leaving the origin");
+Check(SafeHttp.Origin("") is null && SafeHttp.Origin("   ") is null, "an empty address configures nothing");
+Check(SafeHttp.Origin("ftp://192.168.99.11:9191") is null && SafeHttp.Origin("http://user:secret@192.168.99.11:9191") is null
+    && SafeHttp.Origin("not a url at all") is null, "a scheme we do not speak, credentials in the address, or nonsense configures nothing");
+var lan = new Uri("http://192.168.99.11:9191/proxy/vod/movie/abc");
+Check(SafeHttp.Trusted(lan, SafeHttp.Origin("192.168.99.11:9191")), "the configured origin is trusted");
+Check(!SafeHttp.Trusted(lan, SafeHttp.Origin("192.168.99.11:9192")) && !SafeHttp.Trusted(lan, SafeHttp.Origin("https://192.168.99.11:9191"))
+    && !SafeHttp.Trusted(lan, SafeHttp.Origin("192.168.99.12:9191")), "another port, another scheme or another host is not trusted");
+Check(!SafeHttp.Trusted(new Uri("http://169.254.169.254/latest/meta-data/"), SafeHttp.Origin("192.168.99.11:9191")),
+    "a link-local address is never trusted, however the settings are filled in");
+Check(SafeHttp.Trusted(lan, null) == false && SafeHttp.Trusted(lan) == false, "nothing is trusted while no address is configured");
+// The trusted origin passes the open policy that would otherwise refuse a private address, and only it.
+Reject(() => SafeHttp.ValidateOpen(new Uri("http://192.168.99.11:9191/proxy/vod/movie/abc")), "an unconfigured LAN address is refused by the open policy");
+SafeHttp.ValidateOpen(lan, SafeHttp.Origin("192.168.99.11:9191"));
+Check(true, "the configured LAN address passes the open policy");
+Reject(() => SafeHttp.ValidateOpen(lan, SafeHttp.Origin("192.168.99.12:9191")), "a LAN address other than the configured one is refused");
+Reject(() => SafeHttp.ValidateOpen(new Uri("http://192.168.99.11:22/"), SafeHttp.Origin("192.168.99.11:9191")), "the configured host on a mail or ssh port is still refused");
+Reject(() => SafeHttp.ValidateOpen(new Uri("http://169.254.169.254/latest/meta-data/"), SafeHttp.Origin("192.168.99.11:9191")),
+    "a link-local address is refused even while a trusted origin is configured");
+Check(DispatcharrSource.Id == "dispatcharr" && VideoHealth.Label(DispatcharrSource.Id) == "Dispatcharr", "Dispatcharr is labelled by the source id when nothing is configured");
+Check(!DispatcharrSource.IsConfigured, "Dispatcharr is not configured until an address and a key are both set");
+Check(DispatcharrSource.Stream("http://192.168.99.11:9191", "movie", "abc").AbsoluteUri == "http://192.168.99.11:9191/proxy/vod/movie/abc"
+    && DispatcharrSource.Stream("http://192.168.99.11:9191/", "episode", "abc").AbsoluteUri == "http://192.168.99.11:9191/proxy/vod/episode/abc",
+    "a playback address is the proxy route for the content type and the uuid");
+Check(DispatcharrSource.Stream("http://192.168.99.11:9191/vod", "movie", "abc").AbsoluteUri == "http://192.168.99.11:9191/vod/proxy/vod/movie/abc",
+    "a server mounted under a path keeps that path");
 
 var musicSearch = MusicCatalog.ParseSearch("""
 {"tracks":[{"id":"155102871061270528","trackId":"155102871061270528","title":"One <b>More</b> Time","artistIds":["153542153123926016"],"artistNames":["Daft Punk"],

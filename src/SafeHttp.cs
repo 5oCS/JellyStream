@@ -21,7 +21,11 @@ public sealed class SafeHttp : IDisposable
             ConnectCallback = async (context, ct) =>
             {
                 var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, ct);
-                if (addresses.Length == 0 || addresses.Any(a => !IsPublicAddress(a)))
+                // The operator's own server is the one host allowed to resolve to a private address;
+                // it is named in the settings, not by anything the network said.
+                var mine = ConfiguredOrigin is { } origin && origin.Port == context.DnsEndPoint.Port
+                    && string.Equals(origin.IdnHost, context.DnsEndPoint.Host, StringComparison.OrdinalIgnoreCase);
+                if (addresses.Length == 0 || addresses.Any(a => !IsPublicAddress(a) && !mine))
                     throw new HttpRequestException("Source resolved to a non-public address.");
                 var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
                 try { await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, ct); return new NetworkStream(socket, true); }
@@ -81,12 +85,51 @@ public sealed class SafeHttp : IDisposable
         catch (ProviderException) { return false; }
     }
 
+    // The one destination the operator configured themselves: the Dispatcharr address from the
+    // settings. It is matched on scheme, host and port together, so a redirect cannot ride along on
+    // it to a different machine, and it is read from configuration rather than from a response.
+    // Nothing here is cached: parsing one short string is cheaper than a stale origin.
+    public static Uri? ConfiguredOrigin => Origin(Plugin.Instance?.Configuration?.DispatcharrUrl);
+
+    // A configured base address reduced to its origin. A missing scheme is taken as http, which is
+    // what a self-hosted service on a LAN address normally speaks. Anything that is not a plain
+    // http or https address, or that carries credentials in it, is refused — the source then stays
+    // unconfigured rather than quietly pointed somewhere else.
+    public static Uri? Origin(string? configured)
+    {
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+        var text = configured.Trim();
+        if (!text.Contains("://", StringComparison.Ordinal)) text = "http://" + text;
+        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri)) return null;
+        if (uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || uri.HostNameType is UriHostNameType.Unknown) return null;
+        return new Uri(uri.GetLeftPart(UriPartial.Authority));
+    }
+
+    public static bool Trusted(Uri uri) => Trusted(uri, ConfiguredOrigin);
+
+    // Scheme, host and port must all match: a redirect to another port or another name is a
+    // different destination and goes back to being judged by the rules that apply to everyone.
+    public static bool Trusted(Uri uri, Uri? origin) => origin is { } known && known.Scheme == uri.Scheme && known.Port == uri.Port
+        && SameHost(known, uri);
+
+    private static bool SameHost(Uri a, Uri b)
+    {
+        try { return string.Equals(a.IdnHost, b.IdnHost, StringComparison.OrdinalIgnoreCase); }
+        catch (UriFormatException) { return false; }
+    }
+
+    public static void ValidateOpen(Uri uri) => ValidateOpen(uri, ConfiguredOrigin);
+
     // Any public web host, still behind the connect-time address check. Ports below 1024
     // other than the web defaults are refused so a page cannot aim requests at mail or SSH.
-    public static void ValidateOpen(Uri uri)
+    public static void ValidateOpen(Uri uri, Uri? origin)
     {
-        if (uri.Scheme is not ("https" or "http") || uri.UserInfo.Length > 0 || uri.HostNameType is UriHostNameType.Unknown
-            || !(uri.IsDefaultPort || uri.Port >= 1024))
+        if (uri.Scheme is not ("https" or "http") || uri.UserInfo.Length > 0 || uri.HostNameType is UriHostNameType.Unknown)
+            throw new ProviderException("Source returned an unsupported destination.");
+        // The operator's own server, wherever they chose to run it — which for a self-hosted
+        // Dispatcharr is usually a private address on a non-standard port.
+        if (Trusted(uri, origin)) return;
+        if (!(uri.IsDefaultPort || uri.Port >= 1024))
             throw new ProviderException("Source returned an unsupported destination.");
         if (IPAddress.TryParse(Host(uri).Trim('[', ']'), out var literal) && !IsPublicAddress(literal))
             throw new ProviderException("Source returned an unsupported destination.");
@@ -107,10 +150,10 @@ public sealed class SafeHttp : IDisposable
             if (headers is not null)
                 foreach (var pair in headers)
                 {
-                    if (pair.Key is not ("Referer" or "Origin" or "Cookie" or "Authorization")
+                    if (pair.Key is not ("Referer" or "Origin" or "Cookie" or "Authorization" or "X-API-Key")
                         || (pair.Key == "Authorization" && originalHost != "api.themoviedb.org")) throw new ProviderException("Unsupported source header.");
                     // Gate cookies and API tokens belong to one website, never forward them to a redirect elsewhere.
-                    if (pair.Key is not ("Cookie" or "Authorization") || uri.IdnHost == originalHost) request.Headers.TryAddWithoutValidation(pair.Key, pair.Value);
+                    if (pair.Key is not ("Cookie" or "Authorization" or "X-API-Key") || uri.IdnHost == originalHost) request.Headers.TryAddWithoutValidation(pair.Key, pair.Value);
                 }
             // MetaBrainz wants to know whom to contact; the default name stays for everything else.
             if (uri.IdnHost is MusicRadio.MusicBrainzHost or MusicRadio.ListenBrainzHost) request.Headers.TryAddWithoutValidation("User-Agent", MusicRadio.ContactAgent);

@@ -22,16 +22,18 @@ namespace Jellystream;
 // Item IDs: movie/<scope>/<tmdb>, tv/<scope>/<tmdb>, season/<scope>/<tmdb>/<n>, ep/<scope>/<tmdb>/<s>/<e>.
 // The scope (listing name) keeps one title from being moved between folders by Jellyfin;
 // the TMDB provider ID lets watch progress follow the title across listings.
-public sealed class FilmChannel(TmdbCatalog catalog, FlixSource flix, EmbedSources embeds, StreamRelay relay, IHttpContextAccessor contexts,
+public sealed class FilmChannel(TmdbCatalog catalog, FlixSource flix, EmbedSources embeds, DispatcharrSource dispatcharr, StreamRelay relay, IHttpContextAccessor contexts,
     IAuthorizationContext authorization, ILibraryManager library, ILogger<FilmChannel> logger, VideoHealth health)
     : IChannel, IHasCacheKey, IRequiresMediaInfoCallback
 {
     public const string ChannelName = "Movies & TV";
     public static bool IsAvailable => Plugin.Instance?.Configuration is { Enabled: true, FilmEnabled: true } && TmdbCatalog.HasKey;
     // Whether the settings let this film source play: the film channel is on, the name is one of
-    // the shipped sources and its switch in the settings is ticked.
+    // the shipped sources and its switch in the settings is ticked. Dispatcharr also needs an
+    // address and a key, since a source nobody pointed anywhere cannot play anything.
     public static bool IsSourceEnabled(string source) => IsAvailable && Plugin.Instance?.Configuration is { } config
-        && EmbedSources.IsKnown(source) && !config.FilmSourceOff.Contains(source);
+        && EmbedSources.IsKnown(source) && !config.FilmSourceOff.Contains(source)
+        && (source != DispatcharrSource.Id || DispatcharrSource.IsConfigured);
     public string Name => ChannelName;
     public string Description => "Jellystream · Browse movies and TV and stream them online.";
     public string DataVersion => "jellystream-film-2-" + IsAvailable + "-" + (Plugin.Instance?.Configuration.CacheRevision ?? 0);
@@ -200,7 +202,9 @@ public sealed class FilmChannel(TmdbCatalog catalog, FlixSource flix, EmbedSourc
     }
 
     private Task<IReadOnlyList<ResolvedVideo>> ResolveSourceAsync(string source, Film film, int? season, int? episode, CancellationToken ct)
-        => source == "flix" ? flix.ResolveAsync(film, season, episode, ct) : embeds.ResolveAsync(source, film, season, episode, ct);
+        => source == "flix" ? flix.ResolveAsync(film, season, episode, ct)
+        : source == DispatcharrSource.Id ? dispatcharr.ResolveAsync(film, season, episode, ct)
+        : embeds.ResolveAsync(source, film, season, episode, ct);
 
     // A source that never answers, errors or hands back nothing playable can be fallen back from;
     // the caller giving up is not such a failure.

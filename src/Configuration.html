@@ -56,6 +56,13 @@
           <div class="fieldDescription">Make a free account on themoviedb.org, then go to Settings &gt; API. The short API key and the long read access token both work. The channel stays hidden until a key is set.</div></div>
         <div class="jellystreamSource"><span class="jellystreamName">TMDB: titles, posters and episode lists</span>
           <button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="tmdb"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p></div>
+        <h4>Your own Dispatcharr</h4>
+        <div class="inputContainer"><label class="inputLabel" for="dispatcharrUrl">Dispatcharr address</label>
+          <input is="emby-input" type="text" id="dispatcharrUrl" autocomplete="off" spellcheck="false" placeholder="http://192.168.99.11:9191">
+          <div class="fieldDescription">Plays films and episodes from your own Dispatcharr library instead of an embed site. Leave it empty to keep Dispatcharr out of the list below. A local address such as 192.168.x.x is allowed, because it is you who typed it here.</div></div>
+        <div class="inputContainer"><label class="inputLabel" for="dispatcharrKey">Dispatcharr API key</label>
+          <input is="emby-input" type="password" id="dispatcharrKey" autocomplete="off" spellcheck="false">
+          <div class="fieldDescription">Dashboard &gt; Accounts &gt; API keys. It is only ever sent to the address above, never to a redirect, a log or a status line.</div></div>
         <h4>Play films from</h4>
         <div class="fieldDescription">The first switched-on source plays the film; when it fails or is too slow the next one is tried, in the order shown. Tick a source to switch it on and use the arrows to reorder. The state of each source updates every 10 seconds; switches and order take effect when you press Save.</div>
         <ol id="filmOrder" class="jellystreamOrder">
@@ -110,6 +117,10 @@
           <li data-source="frembed">
             <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmFrembed"><span>frembed</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
             <p class="jellystreamVideoHealth" data-source="frembed" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="frembed"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
+          </li>
+          <li data-source="dispatcharr">
+            <div class="jellystreamRow"><label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="filmDispatcharr"><span>Dispatcharr: your own library</span></label><button is="paper-icon-button-light" type="button" class="jellystreamUp" title="Move up"><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span></button><button is="paper-icon-button-light" type="button" class="jellystreamDown" title="Move down"><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span></button></div>
+            <p class="jellystreamVideoHealth" data-source="dispatcharr" role="status"></p><button is="emby-button" type="button" class="raised jellystreamTest" data-kind="video" data-source="dispatcharr"><span>Test now</span></button><p class="jellystreamTestResult" role="status"></p>
           </li>
         </ol>
         <div class="fieldDescription">Test the key after saving it. Each source's test finds a well-known film and its video.</div>
@@ -281,6 +292,8 @@
             page.querySelector('#animeGgEnabled').checked = config.AnimeGgEnabled;
             page.querySelector('#filmEnabled').checked = config.FilmEnabled !== false;
             page.querySelector('#tmdbKey').value = config.TmdbApiKey || '';
+            page.querySelector('#dispatcharrUrl').value = config.DispatcharrUrl || '';
+            page.querySelector('#dispatcharrKey').value = config.DispatcharrApiKey || '';
             page.querySelector('#musicEnabled').checked = config.MusicEnabled !== false;
             page.querySelector('#audiobookEnabled').checked = config.AudiobookEnabled !== false;
             page.querySelector('#musicApi').value = config.MusicApiUrl || '';
@@ -356,6 +369,8 @@
           config.AnimeGgEnabled = page.querySelector('#animeGgEnabled').checked;
           config.FilmEnabled = page.querySelector('#filmEnabled').checked;
           config.TmdbApiKey = page.querySelector('#tmdbKey').value.trim();
+          config.DispatcharrUrl = page.querySelector('#dispatcharrUrl').value.trim();
+          config.DispatcharrApiKey = page.querySelector('#dispatcharrKey').value.trim();
           config.MusicEnabled = page.querySelector('#musicEnabled').checked;
           config.AudiobookEnabled = page.querySelector('#audiobookEnabled').checked;
           config.MusicApiUrl = page.querySelector('#musicApi').value.trim();

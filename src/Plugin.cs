@@ -26,6 +26,11 @@ public sealed class Configuration : BasePluginConfiguration
     public string[] FilmSourceOrder { get; set; } = [];
     // Sources switched off in the settings; the order and these switches together decide who plays.
     public string[] FilmSourceOff { get; set; } = [];
+    // A self-hosted Dispatcharr to play films from. Empty keeps it out of the source list entirely.
+    // The address is the one destination SafeHttp allows to be a private one — see SafeHttp.Origin.
+    public string DispatcharrUrl { get; set; } = "";
+    // X-API-Key, sent only to the address above and never to a redirect, a log or a status line.
+    public string DispatcharrApiKey { get; set; } = "";
     public bool MusicEnabled { get; set; } = true;
     // Empty means MusicCatalog.DefaultApi.
     public string MusicApiUrl { get; set; } = "";
