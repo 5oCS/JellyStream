@@ -9,8 +9,13 @@ namespace Jellystream;
 public static class LocalFolderCatalog
 {
     public const string SourceId = "local";
-    // What in the folder counts as a book. Everything else belongs to somebody else.
-    private static readonly string[] Extensions = [".epub", ".pdf", ".djvu", ".mobi", ".azw3", ".fb2", ".txt"];
+    // What in the folder counts as a book. Mirrors Jellyfin's BookResolver exactly (Jellyfin 12.3,
+    // Emby.Server.Implementations/Library/Resolvers/Books/BookResolver.cs), because this folder is
+    // the same one the operator adds as a Books library: anything Jellyfin's resolver will not turn
+    // into a Book item would be shown here and be permanently unopenable there. Note .djvu, .fb2 and
+    // .txt are deliberately absent — Jellyfin does not recognise them.
+    private static readonly string[] Extensions =
+        [".azw", ".azw3", ".cb7", ".cbr", ".cbt", ".cbz", ".epub", ".mobi", ".pdf"];
     // The folder is the operator's and may be enormous, so the walk is bounded rather than trusted:
     // a shelf of ten thousand files is browsed, a whole disk is not.
     private const int MaxBooks = 2000;

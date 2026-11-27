@@ -199,6 +199,22 @@ public sealed class InternetArchiveCatalog(SafeHttp http) : IDisposable
         }, ct);
     }
 
+    // One item's record and its readable files, read from the same metadata response: a save needs
+    // both, and the name written to disk has to come from the catalog rather than from whoever
+    // asked for the download.
+    public Task<(EbookRecord? Book, IReadOnlyList<EbookFile> Files)> BookAsync(string id, CancellationToken ct)
+    {
+        if (!IsBookId(id)) throw new ProviderException("Invalid catalog page.");
+        return CachedAsync<(EbookRecord?, IReadOnlyList<EbookFile>)>($"ebook/{id}", TimeSpan.FromHours(24), async token =>
+        {
+            using var document = await QueryAsync(new Uri("https://archive.org/metadata/" + Uri.EscapeDataString(id)), token);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("metadata", out var metadata) || Restricted(metadata))
+                return ((EbookRecord?)null, (IReadOnlyList<EbookFile>)[]);
+            return (ParseEbook(metadata), ReadEbookFiles(root));
+        }, ct);
+    }
+
     // Lending items carry this flag in their metadata, and on a search row at its top level. The
     // Archive writes it as the string "true" rather than as a JSON true, so both are read.
     public static bool Restricted(JsonElement element)

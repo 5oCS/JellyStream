@@ -41,6 +41,7 @@ public sealed class ServiceRegistration : IPluginServiceRegistrator
         services.AddSingleton<SubsonicAuth>();
         services.AddSingleton(_ => new MusicLibraryStore());
         services.AddSingleton<MusicSaver>();
+        services.AddSingleton<BookSaver>();
         services.AddHostedService(provider => provider.GetRequiredService<MusicSaver>());
         services.AddSingleton<IAnimeSource, HiAnimeSource>();
         services.AddSingleton<IAnimeSource, AnimeGgSource>();

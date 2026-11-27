@@ -222,7 +222,12 @@
       <div class="jellystreamTabPanel" id="tab-ebooks" role="tabpanel">
         <div class="inputContainer"><label class="inputLabel" for="bookFolder">Ebook folder</label>
           <input is="emby-input" type="text" id="bookFolder" autocomplete="off" spellcheck="false" placeholder="/media/books">
-          <div class="fieldDescription">A folder of EPUB, PDF, DJVU, MOBI, AZW3, FB2 and plain-text books, indexed so they can be browsed and searched. Nothing is fetched from anywhere: this is the offline shelf, and the folder is only ever read. EPUB files carry their own title and author, so those are shown as they are; other formats are shown by their file name. Subfolders are included, but links pointing outside the folder are not followed, and a folder is capped at 2,000 books or 500 MB per file so a whole disk is not walked. Leave empty to index nothing.</div></div>
+          <div class="fieldDescription">A folder of AZW, AZW3, CB7, CBR, CBT, CBZ, EPUB, MOBI and PDF books — exactly the formats Jellyfin's Books library resolves — indexed so they can be browsed and searched. Nothing is fetched from here: the folder is only ever read. EPUB files carry their own title and author, so those are shown as they are; other formats are shown by their file name. Subfolders are included, but links pointing outside the folder are not followed, and a folder is capped at 2,000 books or 500 MB per file so a whole disk is not walked. Leave empty to index nothing. Add this same folder to a Books library in Jellyfin for the books to appear there and be readable.</div></div>
+        <div class="inputContainer"><label class="inputLabel" for="bookArchiveId">Save a book from the Internet Archive</label>
+          <input is="emby-input" type="text" id="bookArchiveId" autocomplete="off" spellcheck="false" placeholder="greatartistsofalltime00farr">
+          <div class="fieldDescription">An Archive identifier is downloaded into the ebook folder as "Title (Year).epub", which is the filename Jellyfin's own BookFileNameParser reads the title and year from. Jellyfin then reads the book's own metadata and cover and tracks the reading position — no reader of ours is involved. The folder has to be one you have added as a Books library, or the file will sit there unseen.</div></div>
+        <button is="emby-button" type="button" id="bookSave" class="raised block"><span>Save to library</span></button>
+        <p id="bookSaveStatus" role="status"></p>
       </div>
 
       <p id="jellystreamStatus" role="status">Loading settings…</p>
@@ -540,6 +545,21 @@
             status.textContent = result.ClearedCount ? 'Search results cleared. Watched status and resume positions were kept.' : 'Search results are already empty.';
           } catch {
             status.textContent = 'Could not clear search results. Please try again.';
+          } finally { button.disabled = !loaded; }
+        });
+        page.querySelector('#bookSave').addEventListener('click', async function () {
+          if (!loaded) return;
+          const button = page.querySelector('#bookSave');
+          const status = page.querySelector('#bookSaveStatus');
+          const id = page.querySelector('#bookArchiveId').value.trim();
+          if (!id) { status.textContent = 'Enter an Archive identifier first.'; return; }
+          button.disabled = true;
+          status.textContent = 'Downloading from the Archive…';
+          try {
+            const result = await ApiClient.ajax({type: 'POST', url: ApiClient.getUrl('StreamFin/Ebooks/Save', {id: id}), dataType: 'json'});
+            status.textContent = 'Saved ' + result.File + ' (' + result.Format + ', ' + Math.round(result.Bytes / 1024) + ' KB). Jellyfin adds it to the Books library on its next scan.';
+          } catch {
+            status.textContent = 'Could not save that book. Check the identifier, and that an ebook folder is set.';
           } finally { button.disabled = !loaded; }
         });
         page.querySelectorAll('.jellystreamTab').forEach(tab => tab.addEventListener('click', function () {

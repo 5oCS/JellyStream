@@ -1095,8 +1095,14 @@ Check(LocalFolderCatalog.SourceId == "local" && LocalFolderCatalog.Root("") is n
     && LocalFolderCatalog.Root("/srv/books/") == "/srv/books" && LocalFolderCatalog.Root("/srv/x/../books") == "/srv/books",
     "the ebook folder follows the same rule as the music save folder");
 Check(LocalFolderCatalog.IsBook("a.EPUB") && LocalFolderCatalog.IsBook("b.pdf") && LocalFolderCatalog.IsBook("c.mobi")
-    && !LocalFolderCatalog.IsBook("d.epub.exe") && !LocalFolderCatalog.IsBook("cover.jpg") && !LocalFolderCatalog.IsBook("e"),
+    && LocalFolderCatalog.IsBook("d.cbz") && LocalFolderCatalog.IsBook("e.azw") && LocalFolderCatalog.IsBook("f.CBT")
+    && !LocalFolderCatalog.IsBook("g.epub.exe") && !LocalFolderCatalog.IsBook("cover.jpg") && !LocalFolderCatalog.IsBook("h"),
     "an extension decides a book, case-insensitively");
+// Jellyfin's BookResolver is the contract: a format it will not resolve would sit in the folder
+// forever unopenable, so the plugin must not offer it either.
+Check(!LocalFolderCatalog.IsBook("readme.txt") && !LocalFolderCatalog.IsBook("scan.djvu")
+    && !LocalFolderCatalog.IsBook("book.fb2"),
+    "formats Jellyfin's BookResolver does not recognise are not offered");
 Check(LocalFolderCatalog.Index("") is { Count: 0 } && LocalFolderCatalog.Index("/no/such/folder-" + Guid.NewGuid().ToString("N")) is { Count: 0 },
     "an empty or missing folder indexes nothing rather than throwing");
 
@@ -1137,7 +1143,7 @@ try
     File.WriteAllText(Path.Combine(bookRoot, "cover.jpg"), "not a book");
     File.WriteAllText(Path.Combine(bookRoot, "nested", "Flatland.epub"), "a whole zip this is not");
     // A file past the bound is not a book whatever its extension says.
-    using (var big = File.Create(Path.Combine(bookRoot, "huge.txt"))) big.SetLength(600L * 1024 * 1024);
+    using (var big = File.Create(Path.Combine(bookRoot, "huge.pdf"))) big.SetLength(600L * 1024 * 1024);
 
     var shelf = LocalFolderCatalog.Index(bookRoot);
     var names = shelf.Select(b => b.Id).OrderBy(n => n, StringComparer.Ordinal).ToArray();
@@ -1172,6 +1178,37 @@ try
     {
         Check(true, "symbolic links unavailable here, walk-safety check skipped");
     }
+
+    // ---- The download half of Path A: a filename BookFileNameParser reads ----
+    var lhd = new EbookRecord("9780441478125", "archive", "The Left Hand of Darkness", ["Ursula K. Le Guin"],
+        null, null, 1969, ["9780441478125"], [new EbookFile("EPUB", new Uri("https://ia903205.us.archive.org/29/items/x/x.epub"), 123)]);
+    Check(BookPaths.Name(lhd, ".epub") == "The Left Hand of Darkness (1969).epub",
+        "a saved book is named the way BookFileNameParser reads name and year");
+    Check(BookPaths.Name(lhd with { Year = null }, ".epub") == "The Left Hand of Darkness.epub",
+        "a book with no year is still named for its title");
+    Check(BookPaths.Name(lhd with { Title = "" }, ".epub").StartsWith("9780441478125"),
+        "a titleless book falls back to its identifier");
+    var epub = new EbookFile("EPUB", new Uri("https://ia903205.us.archive.org/29/items/x/x.epub"), 123);
+    Check(BookPaths.Extension(epub) == ".epub"
+        && BookPaths.Extension(epub with { Format = "PDF" }) == ".pdf"
+        && BookPaths.Extension(epub with { Format = "Text PDF" }) == ".pdf"
+        && BookPaths.Extension(epub with { Format = "DjVuTXT" }) is null,
+        "only formats BookResolver resolves carry an extension");
+    Check(BookPaths.File("/srv/books", lhd, epub) == "/srv/books/The Left Hand of Darkness (1969).epub",
+        "the book is written into the ebook folder");
+    Check(BookPaths.File(null, lhd, epub) is null && BookPaths.File("relative/books", lhd, epub) is null,
+        "no folder means no file, and a relative one is refused");
+    var sneaky = BookPaths.File("/srv/books", lhd with { Title = "../../../etc/passwd" }, epub);
+    Check(sneaky is null || sneaky.StartsWith("/srv/books/", StringComparison.Ordinal),
+        "a catalog title cannot name a file outside the folder");
+
+    Check(BookSaver.ArchiveHost(new Uri("https://ia903205.us.archive.org/29/items/x/x.epub"))
+        && BookSaver.ArchiveHost(new Uri("https://archive.org/download/x/y.epub"))
+        && !BookSaver.ArchiveHost(new Uri("https://evil.example/x.epub"))
+        && !BookSaver.ArchiveHost(new Uri("http://ia903205.us.archive.org/x.epub"))
+        && !BookSaver.ArchiveHost(new Uri("https://archive.org.evil.example/x.epub")),
+        "only the Archive's own hosts are fetched, over https");
+    Check(BookSaver.Folder is null, "no ebook folder is set until one is configured");
 }
 finally
 {
