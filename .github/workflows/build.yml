@@ -1,8 +1,11 @@
 name: build
 
+# Builds run on every push to the testing branch (pre-release validation
+# builds) and on main (the release branch). Actual releases are only
+# published by release.yml when a v* tag lands on main.
 on:
   push:
-    branches: [main]
+    branches: [main, testing]
   pull_request:
   workflow_dispatch:
 
@@ -27,5 +30,63 @@ jobs:
       - run: bash scripts/build.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Jellystream
+          name: Jellystream-${{ github.ref_name }}
           path: artifacts/Jellystream-*.zip
+
+  publish:
+    # Every push to testing republishes a rolling pre-release holding that
+    # build's zip and a manifest.json for it, so the testing branch has a
+    # catalog entry of its own. It is a pre-release, so releases/latest keeps
+    # serving the official manifest from release.yml. The tag is test-build
+    # rather than testing: a tag with the branch's name makes
+    # "git checkout testing" ambiguous for everyone who fetches it.
+    name: Publish the testing manifest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/testing'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the pre-release and upload its assets
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: test-build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: Jellystream-${{ github.ref_name }}
+          path: artifacts
+      - name: Read the project version
+        run: echo "VERSION=$(grep -oP '(?<=<Version>)[^<]+' src/Jellystream.csproj)" >> "$GITHUB_ENV"
+      - name: Generate the manifest
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/previous"
+          if gh release view "$TAG" >/dev/null 2>&1 \
+              && gh release download "$TAG" -p manifest.json -D "$RUNNER_TEMP/previous" 2>/dev/null; then
+            cp "$RUNNER_TEMP/previous/manifest.json" artifacts/manifest.json
+          else
+            printf '[]\n' > artifacts/manifest.json
+          fi
+          python3 scripts/manifest.py \
+            --manifest artifacts/manifest.json \
+            --zip "artifacts/Jellystream-$VERSION.zip" \
+            --url "https://github.com/$REPO/releases/download/$TAG/Jellystream-$VERSION.zip" \
+            --changelog "$(git log -1 --pretty=%s)"
+      - name: Publish the rolling pre-release
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "artifacts/Jellystream-$VERSION.zip" artifacts/manifest.json --clobber
+          else
+            gh release create "$TAG" \
+              "artifacts/Jellystream-$VERSION.zip" artifacts/manifest.json \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title "Jellystream testing $VERSION" \
+              --notes "Rolling pre-release of the testing branch, rebuilt on every push. Not an official release."
+          fi
+          echo "Manifest: https://github.com/$REPO/releases/download/$TAG/manifest.json"

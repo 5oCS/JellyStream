@@ -51,7 +51,10 @@ public sealed class StreamRelay(IServerApplicationHost host, SafeHttp http, IMed
 
     // A session starts from the resolution Jellyfin just probed; resolving again costs several
     // page loads for film sources and can land on a different server or file.
-    public Playback Create(Guid userId, ResolvedVideo resolved, Func<CancellationToken, Task<IReadOnlyList<ResolvedVideo>>> resolve, Func<bool> live)
+    // `origin` is the address the PlaybackInfo request arrived on. The video stays on loopback because
+    // Jellyfin's own HTTP client fetches it from this machine, but the player's browser fetches the
+    // subtitles itself from wherever the viewer is, so theirs are built from the request's origin.
+    public Playback Create(Guid userId, ResolvedVideo resolved, Func<CancellationToken, Task<IReadOnlyList<ResolvedVideo>>> resolve, Func<bool> live, string? origin = null)
     {
         var hls = resolved.Hls;
         foreach (var pair in tickets.Where(p => p.Value.Expires < DateTime.UtcNow)) tickets.TryRemove(pair.Key, out _);
@@ -61,9 +64,11 @@ public sealed class StreamRelay(IServerApplicationHost host, SafeHttp http, IMed
         var id = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         var ticket = tickets[id] = new(userId, hls, resolve, live) { Video = resolved, First = resolved };
         var root = host.GetLocalApiUrl("127.0.0.1", "http", host.HttpPort).TrimEnd('/') + "/StreamFin/Internal/Stream/" + id;
+        var subtitles = string.IsNullOrWhiteSpace(origin) ? root
+            : origin.TrimEnd('/') + "/StreamFin/Internal/Stream/" + id;
         // The extension lets FFmpeg pick its HLS reader before reading a byte.
         return new(id, root + (hls ? "/master.m3u8" : ""), secret,
-            (resolved.Subtitles ?? []).Select((_, i) => $"{root}/sub/{i}.vtt?key={ticket.SubtitleKey}").ToArray());
+            (resolved.Subtitles ?? []).Select((_, i) => $"{subtitles}/sub/{i}.vtt?key={ticket.SubtitleKey}").ToArray());
     }
 
     // Whether a playback address handed out earlier still works: tickets expire, and the oldest give way to new ones.
@@ -72,9 +77,9 @@ public sealed class StreamRelay(IServerApplicationHost host, SafeHttp http, IMed
 
     // Jellyfin only extracts embedded subtitles from local files, so remote ones must be external.
     public async Task<MediaSourceInfo> MediaSourceAsync(Guid userId, ResolvedVideo resolved, string name,
-        Func<CancellationToken, Task<IReadOnlyList<ResolvedVideo>>> resolve, Func<bool> live, CancellationToken ct)
+        Func<CancellationToken, Task<IReadOnlyList<ResolvedVideo>>> resolve, Func<bool> live, CancellationToken ct, string? origin = null)
     {
-        var playback = Create(userId, resolved, resolve, live);
+        var playback = Create(userId, resolved, resolve, live, origin);
         try { return await ProbeAsync(playback, resolved, name, ct); }
         catch { tickets.TryRemove(playback.Id, out _); throw; }
     }
@@ -97,6 +102,7 @@ public sealed class StreamRelay(IServerApplicationHost host, SafeHttp http, IMed
         timeout.CancelAfter(TimeSpan.FromSeconds(90));
         var info = await encoder.GetMediaInfo(new MediaInfoRequest { MediaSource = media, MediaType = DlnaProfileType.Video, ExtractChapters = false }, timeout.Token);
         var streams = info.MediaStreams.Where(s => s.Type != MediaStreamType.Subtitle).ToList();
+        var video = streams.Find(s => s.Type == MediaStreamType.Video);
         var subtitles = resolved.Subtitles ?? [];
         for (var i = 0; i < subtitles.Count; i++)
             streams.Add(new MediaStream
@@ -107,9 +113,18 @@ public sealed class StreamRelay(IServerApplicationHost host, SafeHttp http, IMed
             });
         media.MediaStreams = streams;
         media.RunTimeTicks = info.RunTimeTicks;
-        media.Bitrate = info.Bitrate;
+        // A master playlist reports no single bitrate, so Jellyfin's ladder falls back to whichever
+        // figure the probe or the video stream actually carries, and the stream is given that figure
+        // back so the ladder and the menu's secondary text describe the same source. The stream's
+        // member is spelled BitRate; MediaSourceInfo's is Bitrate.
+        media.Bitrate = info.Bitrate ?? video?.BitRate;
+        if (media.Bitrate is { } total && video is { BitRate: null }) video.BitRate = total;
         media.Size = info.Size;
         media.Container = info.Container;
+        // A source that labelled its stream "HLS" or "MP4" named its transport, not its picture: the
+        // probe has the height the viewer actually gets, so the label is corrected here.
+        if (video?.Height is { } height && height > 0 && !QualityRank.Rated(media.Name))
+            media.Name = QualityRank.Relabel(media.Name, height);
         return media;
     }
 
@@ -230,8 +245,10 @@ public sealed class StreamRelay(IServerApplicationHost host, SafeHttp http, IMed
 
     public async Task ServeSubtitleAsync(HttpContext context, string id, int index, string key)
     {
-        var address = context.Connection.RemoteIpAddress;
-        if (address is null || !IPAddress.IsLoopback(address) || !tickets.TryGetValue(id, out var ticket) || ticket.Expires <= DateTime.UtcNow
+        // The video routes keep their loopback gate because Jellyfin's own HTTP client fetches them
+        // from this machine. This route is called directly by the player's browser, from wherever the
+        // viewer is, so the 24-byte per-ticket key compared in constant time below is the gate instead.
+        if (!tickets.TryGetValue(id, out var ticket) || ticket.Expires <= DateTime.UtcNow
             || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(key), Encoding.UTF8.GetBytes(ticket.SubtitleKey))
             || !Plugin.Allows(ticket.UserId) || !ticket.Live() || ticket.First.Subtitles is not { } subtitles || index < 0 || index >= subtitles.Count)
         { context.Response.StatusCode = 403; return; }

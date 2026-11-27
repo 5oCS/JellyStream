@@ -44,7 +44,7 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
     private const int MaxDepth = 5;
 
     // A stream address found on a page, and whether it is a playlist.
-    private sealed record Candidate(Uri Url, bool Hls);
+    public sealed record Candidate(Uri Url, bool Hls, string? Label = null);
 
     public async Task<IReadOnlyList<ResolvedVideo>> ResolveAsync(Film film, int? season, int? episode, CancellationToken ct)
     {
@@ -61,10 +61,11 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
                 {
                     try
                     {
-                        if ((await PlayerAsync(server.Link, referer, 0, ct)).Video is not { } video) continue;
-                        var known = video.Subtitles!.Select(s => s.Url).ToHashSet();
+                        var (videos, _) = await PlayerAsync(server.Link, referer, 0, ct);
+                        if (videos.Count == 0) continue;
+                        var known = videos.SelectMany(v => v.Subtitles ?? []).Select(s => s.Url).ToHashSet();
                         var extra = (await SubtitleIndexAsync(server.Link, referer, ct)).Where(s => !known.Contains(s.Url));
-                        return [video with { Subtitles = Languages.Arrange(video.Subtitles!.Concat(extra)) }];
+                        return videos.Select(v => v with { Subtitles = Languages.Arrange((v.Subtitles ?? []).Concat(extra)) }).ToArray();
                     }
                     catch (Exception ex) when (ex is ProviderException or HttpRequestException or System.Text.RegularExpressions.RegexMatchTimeoutException or UriFormatException or TaskCanceledException && !ct.IsCancellationRequested)
                     {
@@ -213,42 +214,54 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
 
 
     // The walk, with the reasons it found nothing: the page it reached and what that page said.
-    public async Task<(ResolvedVideo? Video, IReadOnlyList<string> Problems)> PlayerAsync(Uri embed, Uri referer, int depth, CancellationToken ct)
+    public async Task<(IReadOnlyList<ResolvedVideo> Videos, IReadOnlyList<string> Problems)> PlayerAsync(Uri embed, Uri referer, int depth, CancellationToken ct)
     {
         var problems = new List<string>();
-        var video = await WalkAsync(embed, referer, depth, [], problems, ct);
-        return (video, problems);
+        var videos = await WalkAsync(embed, referer, depth, [], problems, ct);
+        return (videos, problems);
     }
 
-    private async Task<ResolvedVideo?> WalkAsync(Uri embed, Uri referer, int depth, HashSet<Uri> seen, List<string> problems, CancellationToken ct)
+    private async Task<IReadOnlyList<ResolvedVideo>> WalkAsync(Uri embed, Uri referer, int depth, HashSet<Uri> seen, List<string> problems, CancellationToken ct)
     {
-        if (!seen.Add(embed)) return null;
+        if (!seen.Add(embed)) return [];
         var (final, html) = await http.PageAsync(embed, ct, headers: Referer(referer), open: true);
-        var candidate = Media(html) ?? await PlayerApiAsync(final, html, ct, problems);
-        if (candidate is { } found)
+        var candidates = Media(html);
+        if (candidates.Count == 0 && await PlayerApiAsync(final, html, ct, problems) is { } api) candidates = [api];
+        if (candidates.Count > 0)
         {
             var origin = final.GetLeftPart(UriPartial.Authority);
             var headers = new Dictionary<string, string> { ["Referer"] = origin + "/", ["Origin"] = origin };
-            if (found.Hls && !(await http.TextAsync(found.Url, ct, headers: headers, open: true)).TrimStart('﻿', ' ', '\r', '\n').StartsWith("#EXTM3U", StringComparison.Ordinal))
-                throw new ProviderException("The player did not return an HLS playlist.");
-            return new ResolvedVideo(found.Url, found.Hls ? "HLS" : "MP4", headers, false, found.Hls, FindSubtitles(html));
+            var subtitles = FindSubtitles(html);
+            var videos = new List<ResolvedVideo>();
+            foreach (var found in candidates)
+            {
+                if (found.Hls && !(await http.TextAsync(found.Url, ct, headers: headers, open: true)).TrimStart('﻿', ' ', '\r', '\n').StartsWith("#EXTM3U", StringComparison.Ordinal))
+                {
+                    problems.Add($"{found.Url} is not an HLS playlist");
+                    continue;
+                }
+                // The source list's own label is kept when it names a height; a transport like
+                // "HLS" or "MP4" carries no height, so ProbeAsync corrects it from the probe.
+                videos.Add(new ResolvedVideo(found.Url, found.Label ?? (found.Hls ? "HLS" : "MP4"), headers, false, found.Hls, subtitles));
+            }
+            if (videos.Count > 0) return videos;
         }
-        if (depth >= MaxDepth) { problems.Add($"{final} reached the end of the chain"); return null; }
+        if (depth >= MaxDepth) { problems.Add($"{final} reached the end of the chain"); return []; }
         foreach (var frame in Hops(final, html).Distinct().Take(depth < 2 ? 4 : 2))
         {
-            try { if (await WalkAsync(frame, final, depth + 1, seen, problems, ct) is { } video) return video; }
+            try
+            {
+                var nested = await WalkAsync(frame, final, depth + 1, seen, problems, ct);
+                if (nested.Count > 0) return nested;
+            }
             catch (Exception ex) when (ex is ProviderException or HttpRequestException or System.Text.RegularExpressions.RegexMatchTimeoutException or UriFormatException && !ct.IsCancellationRequested) { }
         }
         problems.Add($"{final} named no playable video");
-        return null;
+        return [];
     }
 
-    // A stream address in the page itself.
-    private static Candidate? Media(string html)
-    {
-        if (FindMedia(html) is not { } url) return null;
-        return new Candidate(url, url.AbsolutePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));
-    }
+    // A stream address in the page itself, with the height its list names for it.
+    private static IReadOnlyList<Candidate> Media(string html) => FindMediaAll(html);
 
     // Some players do not put the stream in the page: they carry a JSON config naming a signed token
     // and the servers they offer, and a small JSON API beside them trades one server reference for the
@@ -414,15 +427,40 @@ public sealed class FlixSource(SafeHttp http) : IDisposable
         return false;
     }
 
-    public static Uri? FindMedia(string html)
+    // The label the source list gives an address, read from the object that carries it: a list
+    // offering several heights writes "file" and "label" inside the same { ... }, so the enclosing
+    // braces are searched rather than the whole page, which would pair an address with a
+    // neighbouring entry's height.
+    private static readonly Regex MediaLabel = Rx(@"[""']?label[""']?\s*:\s*[""']([^""']+)[""']");
+
+    private static string? LabelNear(string blob, int at)
     {
+        var open = blob.LastIndexOf('{', at);
+        var close = blob.IndexOf('}', at);
+        if (open < 0 || close < open) return null;
+        var label = MediaLabel.Match(blob, open, close - open + 1);
+        return label.Success && label.Groups[1].Value.Trim().Length > 0 ? label.Groups[1].Value.Trim() : null;
+    }
+
+    // Every playable address the page offers, each with the height its own list names for it. A page
+    // listing 720p and 1080p of one stream yields both, so a resolver keeps only what it can rank
+    // instead of playing whichever entry the page happened to write first.
+    public static IReadOnlyList<Candidate> FindMediaAll(string html)
+    {
+        var found = new List<Candidate>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var blobs = Unpack(html).Prepend(html).Select(b => b.Replace("\\/", "/", StringComparison.Ordinal)).ToArray();
         foreach (var blob in blobs)
-            if (M3u8.Match(blob) is { Success: true } m && Valid(m.Value) is { } url) return url;
+            foreach (Match m in M3u8.Matches(blob))
+                if (Valid(m.Value) is { } url && seen.Add(url.AbsoluteUri)) found.Add(new Candidate(url, true, LabelNear(blob, m.Index)));
+        if (found.Count > 0) return found;
         foreach (var blob in blobs)
-            if (Mp4.Match(blob) is { Success: true } m && Valid(m.Groups[1].Value) is { } url) return url;
-        return null;
+            foreach (Match m in Mp4.Matches(blob))
+                if (Valid(m.Groups[1].Value) is { } url && seen.Add(url.AbsoluteUri)) found.Add(new Candidate(url, false, LabelNear(blob, m.Index)));
+        return found;
     }
+
+    public static Uri? FindMedia(string html) => FindMediaAll(html).FirstOrDefault()?.Url;
     private static Uri? Valid(string link)
     {
         if (!Uri.TryCreate(link, UriKind.Absolute, out var url)) return null;
