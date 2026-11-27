@@ -47,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "DEBUG: TAG=$TAG"
-          echo "DEBUG: GH_TOKEN set: $([ -n \"$GH_TOKEN\" ] && echo yes || echo no)"
+          echo "DEBUG: GH_TOKEN set: $([ -n "$GH_TOKEN" ] && echo yes || echo no)"
           git fetch --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "refs/tags/$TAG:refs/tags/$TAG"
           notes=$(git tag -l --format='%(contents:body)' "$TAG")
           [ -n "$notes" ] || notes=$(git tag -l --format='%(contents:subject)' "$TAG")
@@ -83,5 +83,5 @@ jobs:
           fi
           echo "DEBUG: Release ID: $release_id"
           echo "DEBUG: Uploading assets"
-          gh release upload "$TAG" artifacts/Jellystream-$VERSION.zip artifacts/Jellystream-$VERSION.zip.sigstore.json artifacts/manifest.json --clobber
+          gh release upload "$TAG" "artifacts/Jellystream-$VERSION.zip" "artifacts/Jellystream-$VERSION.zip.sigstore.json" artifacts/manifest.json --clobber
           echo "DEBUG: Upload complete"
