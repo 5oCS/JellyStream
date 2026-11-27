@@ -34,6 +34,7 @@ public sealed class ServiceRegistration : IPluginServiceRegistrator
         services.AddSingleton<MusicAudio>();
         services.AddSingleton<LibriVoxCatalog>();
         services.AddSingleton<InternetArchiveCatalog>();
+        services.AddSingleton<OpenLibraryCatalog>();
         services.AddSingleton<PodcastCatalog>();
         services.AddSingleton<MusicPrefetch>();
         services.AddSingleton<MusicArtCache>();

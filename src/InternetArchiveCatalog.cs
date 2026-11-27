@@ -155,6 +155,109 @@ public sealed class InternetArchiveCatalog(SafeHttp http) : IDisposable
             AudioJson.Clean(AudioJson.Text(element, "description")), year, null, null);
     }
 
+    // ---- Ebooks (Path A) ----------------------------------------------------------------
+
+    private const string EbookFields = "fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=creator&fl%5B%5D=date"
+        + "&fl%5B%5D=description&fl%5B%5D=access-restricted-item";
+    // What a reader can open, best first. An encrypted file carries a different format name, so the
+    // DRM half of the non-goals is met by this list rather than by a separate check.
+    private static readonly string[] Readable = ["EPUB", "Text PDF", "PDF"];
+    // A book is a book: past this the item is a scan of a shelf rather than a file to read.
+    private const long MaxEbookBytes = 500L * 1024 * 1024;
+
+    public Task<IReadOnlyList<EbookRecord>> SearchEbooksAsync(string term, int limit, CancellationToken ct)
+    {
+        term = Sanitize(term);
+        if (term.Length == 0) return Task.FromResult<IReadOnlyList<EbookRecord>>([]);
+        limit = Math.Clamp(limit, 1, 50);
+        return CachedAsync<IReadOnlyList<EbookRecord>>($"ebooks/{term.ToLowerInvariant()}/{limit}", TimeSpan.FromMinutes(30), async token =>
+        {
+            var filter = "mediatype:texts AND (format:(\"EPUB\") OR format:(\"Text PDF\") OR format:(\"PDF\")) AND " + term;
+            var query = "?q=" + Uri.EscapeDataString(filter) + "&" + EbookFields + "&rows=" + limit + "&page=1&output=json";
+            using var document = await QueryAsync(new Uri(SearchEndpoint, query), token);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("response", out var response) || !response.TryGetProperty("docs", out var docs)
+                || docs.ValueKind != JsonValueKind.Array) return [];
+            var books = new List<EbookRecord>();
+            foreach (var doc in docs.EnumerateArray())
+                if (ParseEbook(doc) is { } book) books.Add(book);
+            return (IReadOnlyList<EbookRecord>)books;
+        }, ct);
+    }
+
+    // One item's readable files. Lending items list theirs but will not serve them, so they offer
+    // none rather than offering links that end at a login.
+    public Task<IReadOnlyList<EbookFile>> FilesAsync(string id, CancellationToken ct)
+    {
+        if (!IsBookId(id)) throw new ProviderException("Invalid catalog page.");
+        return CachedAsync<IReadOnlyList<EbookFile>>($"ebookfiles/{id}", TimeSpan.FromHours(24), async token =>
+        {
+            using var document = await QueryAsync(new Uri("https://archive.org/metadata/" + Uri.EscapeDataString(id)), token);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("metadata", out var metadata) || Restricted(metadata)) return [];
+            return ReadEbookFiles(root);
+        }, ct);
+    }
+
+    // Lending items carry this flag in their metadata, and on a search row at its top level. The
+    // Archive writes it as the string "true" rather than as a JSON true, so both are read.
+    public static bool Restricted(JsonElement element)
+    {
+        if (!element.TryGetProperty("access-restricted-item", out var flag)) return false;
+        return flag.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.String => string.Equals(flag.GetString()?.Trim(), "true", StringComparison.OrdinalIgnoreCase),
+            _ => false,
+        };
+    }
+
+    public static EbookRecord? ParseEbook(JsonElement doc)
+    {
+        var id = AudioJson.Text(doc, "identifier");
+        var title = AudioJson.Text(doc, "title");
+        if (id is null || string.IsNullOrWhiteSpace(title) || !IsBookId(id)) return null;
+        // Titles arrive as one string or a list; the folder takes the first.
+        if (doc.TryGetProperty("title", out var titles) && titles.ValueKind == JsonValueKind.Array && titles.GetArrayLength() > 0)
+            title = titles[0].GetString();
+        if (string.IsNullOrWhiteSpace(title) || Restricted(doc)) return null;
+        var date = AudioJson.Text(doc, "date");
+        int? year = null;
+        if (date is { Length: >= 4 } && int.TryParse(date[..4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) year = parsed;
+        return new EbookRecord(id, SourceId, title.Trim(), AudioJson.List(doc, "creator"),
+            "https://archive.org/services/img/" + id, AudioJson.Clean(AudioJson.Text(doc, "description")), year, [id], []);
+    }
+
+    // The readable files of an item, best format first and then the lightest of that format. The
+    // node name comes from the response, so it is assembled as a URL and validated as one rather
+    // than concatenated into a string that happens to look like a path.
+    public static IReadOnlyList<EbookFile> ReadEbookFiles(JsonElement root)
+    {
+        if (!root.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Array) return [];
+        // Checked here as well as by the caller: a lending item lists the files it will not serve,
+        // and a reader that trusts this list would hand out links that end at a login.
+        if (root.TryGetProperty("metadata", out var metadata) && Restricted(metadata)) return [];
+        var server = root.TryGetProperty("server", out var host) && host.ValueKind == JsonValueKind.String ? host.GetString() : null;
+        var dir = root.TryGetProperty("dir", out var folder) && folder.ValueKind == JsonValueKind.String ? folder.GetString() : null;
+        if (server is not { Length: > 0 } || dir is not { Length: > 0 } || !dir.StartsWith('/')) return [];
+        var found = new List<EbookFile>();
+        foreach (var file in files.EnumerateArray())
+        {
+            var format = AudioJson.Text(file, "format");
+            if (format is null) continue;
+            var rank = Array.IndexOf(Readable, format);
+            if (rank < 0) continue;
+            var name = AudioJson.Text(file, "name");
+            if (name is null || name.Contains('/') || name.Contains('\\') || name.Contains("..", StringComparison.Ordinal)) continue;
+            long? size = long.TryParse(AudioJson.Text(file, "size"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var bytes) ? bytes : null;
+            if (size > MaxEbookBytes) continue;
+            if (!Uri.TryCreate($"https://{server}{dir}/{Uri.EscapeDataString(name)}", UriKind.Absolute, out var url)) continue;
+            try { SafeHttp.ValidateOpen(url); } catch (ProviderException) { continue; }
+            found.Add(new EbookFile(format, url, size));
+        }
+        return found.OrderBy(f => Array.IndexOf(Readable, f.Format)).ThenBy(f => f.Size ?? long.MaxValue).ToArray();
+    }
+
     // Free text only: quotes, parentheses, and AND-words would rewrite the query's meaning.
     private static string Sanitize(string term)
     {

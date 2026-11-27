@@ -1012,6 +1012,82 @@ Check(LibriVoxCatalog.IsBookId("1234567") && !LibriVoxCatalog.IsBookId("abc") &&
 Check(LibriVoxCatalog.GenreName("poetry") == "Poetry" && LibriVoxCatalog.GenreName("science") == "Science" && LibriVoxCatalog.GenreName("nope") is null
     && LibriVoxCatalog.Genres.Length == 18 && LibriVoxCatalog.SourceId == "lv" && InternetArchiveCatalog.SourceId == "ia",
     "LibriVox genres and source names are the catalogs' own");
+
+// Ebooks: Open Library is the metadata half, the Archive supplies the bytes, and a lending item
+// offers neither a row nor a file.
+Check(OpenLibraryCatalog.SourceId == "ol" && InternetArchiveCatalog.SourceId == "ia", "the ebook sources are named");
+var olDoc = System.Text.Json.JsonDocument.Parse("""
+{"key":"/works/OL59800W","title":"The Left Hand of Darkness","author_name":["Ursula K. Le Guin"],
+ "first_publish_year":1969,"cover_i":10618463,"ia":["lefthandofdarkne0000ursu_l8k8","bwb_S0-ALL-813"],
+ "description":"[A blurb](https://example.com) with a link in it."}
+""").RootElement;
+var olBook = OpenLibraryCatalog.Parse(olDoc)!;
+Check(olBook.Id == "/works/OL59800W" && olBook.Source == "ol" && olBook.Title == "The Left Hand of Darkness"
+    && olBook.Authors.SequenceEqual(["Ursula K. Le Guin"]) && olBook.Year == 1969, "Open Library reads a work row");
+Check(olBook.Image == "https://covers.openlibrary.org/b/id/10618463-L.jpg" && olBook.ArchiveIds.Count == 2 && olBook.Files.Count == 0,
+    "the cover, the Archive identifiers and no files until they are asked for");
+Check(olBook.Description == "A blurb with a link in it.", "a Markdown link is read as its text");
+Check(OpenLibraryCatalog.Parse(System.Text.Json.JsonDocument.Parse("""{"title":"No Key"}""").RootElement) is null
+    && OpenLibraryCatalog.Parse(System.Text.Json.JsonDocument.Parse("""{"key":"/works/OL1W"}""").RootElement) is null,
+    "a row without an id or without a title is not a book");
+Check(OpenLibraryCatalog.Cover(null) is null && OpenLibraryCatalog.Cover(0) is null
+    && OpenLibraryCatalog.Cover(10618463)!.AbsoluteUri == "https://covers.openlibrary.org/b/id/10618463-L.jpg",
+    "a cover is only built from a real cover id");
+
+var iaDoc = System.Text.Json.JsonDocument.Parse("""
+{"identifier":"greatartistsvolr22564gut","title":"Great Artists, Vol 1.","creator":["Raphael"],
+ "date":"1979-01-01T00:00:00Z","description":"A study."}
+""").RootElement;
+var iaBook = InternetArchiveCatalog.ParseEbook(iaDoc)!;
+Check(iaBook.Id == "greatartistsvolr22564gut" && iaBook.Source == "ia" && iaBook.Year == 1979
+    && iaBook.ArchiveIds.SequenceEqual(["greatartistsvolr22564gut"]), "the Archive reads a texts row");
+Check(InternetArchiveCatalog.ParseEbook(System.Text.Json.JsonDocument.Parse("""
+{"identifier":"lend0000","title":"On Loan","access-restricted-item":true}
+""").RootElement) is null, "a lending item is not offered as a readable book");
+Check(InternetArchiveCatalog.ParseEbook(System.Text.Json.JsonDocument.Parse("""
+{"identifier":"lend0001","title":"On Loan","access-restricted-item":"true"}
+""").RootElement) is null, "a lending item written as the string true is not offered either");
+Check(InternetArchiveCatalog.ParseEbook(System.Text.Json.JsonDocument.Parse("""
+{"identifier":"../etc/passwd","title":"Escape"}
+""").RootElement) is null, "an identifier that is not URL-safe is refused");
+
+var iaFiles = System.Text.Json.JsonDocument.Parse("""
+{"server":"ia800607.us.archive.org","dir":"/9/items/greatartistsvolr22564gut","files":[
+ {"name":"pg22564-images.epub","format":"EPUB","size":"3657416","source":"original"},
+ {"name":"pg22564.epub","format":"EPUB","size":"92945","source":"original"},
+ {"name":"pg22564_djvu.txt","format":"DjVuTXT","size":"1000"},
+ {"name":"pg22564_lcp.epub","format":"LCP Encrypted EPUB","size":"1633955"},
+ {"name":"pg22564.pdf","format":"Text PDF","size":"5000000"},
+ {"name":"huge.pdf","format":"Text PDF","size":"99999999999"},
+ {"name":"../escape.epub","format":"EPUB","size":"10"},
+ {"name":"sub/dir.epub","format":"EPUB","size":"10"}]}
+""").RootElement;
+var readable = InternetArchiveCatalog.ReadEbookFiles(iaFiles);
+Check(readable.Count == 3, "readable files are kept and the rest are dropped: " + string.Join(", ", readable.Select(f => f.Format + "/" + f.Url.Segments[^1])));
+Check(readable[0].Format == "EPUB" && readable[0].Size == 92945, "EPUB comes first and the lightest of a format leads");
+Check(readable.Any(f => f.Format == "Text PDF" && f.Url.AbsoluteUri == "https://ia800607.us.archive.org/9/items/greatartistsvolr22564gut/pg22564.pdf"),
+    "a file address is the node, the directory and the name");
+Check(!readable.Any(f => f.Url.AbsoluteUri.Contains("LCP", StringComparison.Ordinal)), "an encrypted file is never offered");
+Check(!readable.Any(f => f.Url.AbsoluteUri.Contains("..", StringComparison.Ordinal) || f.Url.AbsoluteUri.Contains("/sub/", StringComparison.Ordinal)),
+    "a name that escapes its directory is dropped");
+Check(InternetArchiveCatalog.ReadEbookFiles(System.Text.Json.JsonDocument.Parse("""
+{"server":"ia800607.us.archive.org","dir":"9/items/x","files":[]}
+""").RootElement).Count == 0, "a directory that is not a path is refused");
+Check(InternetArchiveCatalog.ReadEbookFiles(System.Text.Json.JsonDocument.Parse("""
+{"files":[{"name":"a.epub","format":"EPUB","size":"1"}]}
+""").RootElement).Count == 0, "an item that names no node offers no files");
+Check(InternetArchiveCatalog.Restricted(System.Text.Json.JsonDocument.Parse("""{"access-restricted-item":true}""").RootElement)
+    && InternetArchiveCatalog.Restricted(System.Text.Json.JsonDocument.Parse("""{"access-restricted-item":"true"}""").RootElement)
+    && InternetArchiveCatalog.Restricted(System.Text.Json.JsonDocument.Parse("""{"access-restricted-item":" true "}""").RootElement)
+    && !InternetArchiveCatalog.Restricted(System.Text.Json.JsonDocument.Parse("""{"access-restricted-item":false}""").RootElement)
+    && !InternetArchiveCatalog.Restricted(System.Text.Json.JsonDocument.Parse("""{"access-restricted-item":"false"}""").RootElement)
+    && !InternetArchiveCatalog.Restricted(System.Text.Json.JsonDocument.Parse("""{"title":"x"}""").RootElement),
+    "the lending flag is read whether the Archive writes it as a boolean or as the string true");
+Check(InternetArchiveCatalog.ReadEbookFiles(System.Text.Json.JsonDocument.Parse("""
+{"server":"ia800607.us.archive.org","dir":"/9/items/x","metadata":{"access-restricted-item":"true"},
+ "files":[{"name":"a.epub","format":"EPUB","size":"10"}]}
+""").RootElement).Count == 0, "the file reader itself refuses a lending item, not only its caller");
+
 using (var art = typeof(Plugin).Assembly.GetManifestResourceStream("Jellystream.Assets.audiobook.png")!)
 {
     var magic = new byte[4];
