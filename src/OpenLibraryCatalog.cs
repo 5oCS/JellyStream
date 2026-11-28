@@ -13,7 +13,10 @@ public sealed record EbookFile(string Format, Uri Url, long? Size);
 // supplies both — and Files stays empty until someone asks, because a search row does not carry an
 // item's file list.
 public sealed record EbookRecord(string Id, string Source, string Title, IReadOnlyList<string> Authors,
-    string? Image, string? Description, int? Year, IReadOnlyList<string> ArchiveIds, IReadOnlyList<EbookFile> Files);
+    string? Image, string? Description, int? Year, IReadOnlyList<string> ArchiveIds, IReadOnlyList<EbookFile> Files,
+    // Origin is the catalogued address this row came from. A direct file link is only ever fetched
+    // from that address's own host, so a feed cannot name somewhere else for us to download from.
+    string? Origin = null);
 
 // Open Library answers by ISBN or by title and author, and is the metadata half of Path A: what the
 // book is, its cover, and which Archive items hold it. The bytes come from InternetArchiveCatalog,

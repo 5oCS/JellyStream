@@ -62,13 +62,31 @@ public sealed class BookSaver(SafeHttp http, ILogger<BookSaver> logger)
     public static bool ArchiveHost(Uri uri) => uri.Scheme == Uri.UriSchemeHttps
         && (uri.IdnHost == "archive.org" || uri.IdnHost.EndsWith(".archive.org", StringComparison.OrdinalIgnoreCase));
 
-    public async Task<string> SaveAsync(EbookRecord book, EbookFile file, string folder, CancellationToken ct)
+    public async Task<string> SaveAsync(EbookRecord book, EbookFile file, string folder, CancellationToken ct) =>
+        await WriteAsync(book, file, folder, ArchiveHost, ct);
+
+    // A direct file link from a catalog the operator configured themselves. The configured address
+    // is what makes a host trustworthy — a feed may name any URL it likes, including one inside the
+    // network — so the link is only followed while it stays on that address's own host, and that is
+    // re-checked against the address it lands on after a redirect. Everything past the host check is
+    // the Archive path, because the size bound, the magic-byte check and the name are all about the
+    // bytes, which have no idea where they came from.
+    public async Task<string> SaveUrlAsync(EbookRecord book, EbookFile file, string folder, string origin, CancellationToken ct)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var feed))
+            throw new ProviderException("That book does not say which catalog it came from.");
+        if (!SafeHttp.Trusted(file.Url, feed))
+            throw new ProviderException("That file is not on the catalog's own address.");
+        return await WriteAsync(book, file, folder, uri => SafeHttp.Trusted(uri, feed), ct);
+    }
+
+    private async Task<string> WriteAsync(EbookRecord book, EbookFile file, string folder, Func<Uri, bool> trusted, CancellationToken ct)
     {
         if (BookPaths.File(folder, book, file) is not { } target)
             throw new ProviderException("That book is in a format or folder no Books library would read.");
         // Checked before anything else, including the "already saved" shortcut: returning a path for
         // an address we would never have fetched hides the refusal behind a plausible answer.
-        if (!ArchiveHost(file.Url)) throw new ProviderException("That book is not offered by the Archive.");
+        if (!trusted(file.Url)) throw new ProviderException("That book is not offered by the Archive.");
         if (file.Size is > MaxBookBytes) throw new ProviderException("That book is too large to save.");
         // Already there: whoever put it there owns it, and the library already has the item.
         if (File.Exists(target)) return target;
@@ -76,7 +94,7 @@ public sealed class BookSaver(SafeHttp http, ILogger<BookSaver> logger)
         var part = target + ".part";
         try
         {
-            await FetchAsync(file.Url, part, BookPaths.Extension(file)!, ct);
+            await FetchAsync(file.Url, part, BookPaths.Extension(file)!, trusted, ct);
             // Never replace a file that is already there, whoever put it there.
             if (!File.Exists(target)) File.Move(part, target, overwrite: false);
             logger.LogInformation("Jellystream saved {Book} to the books folder", Path.GetFileName(target));
@@ -90,12 +108,13 @@ public sealed class BookSaver(SafeHttp http, ILogger<BookSaver> logger)
 
     // Moved into place only when it is the file it claims to be, so an error page never becomes a
     // book the library offers to read.
-    private async Task FetchAsync(Uri url, string part, string extension, CancellationToken ct)
+    private async Task FetchAsync(Uri url, string part, string extension, Func<Uri, bool> trusted, CancellationToken ct)
     {
         using var response = await http.OpenAsync(url, false, ct, open: true);
-        // A redirect may leave the Archive, and the final address is the one being read from.
+        // A redirect may leave the address that named the file, and the final address is the one
+        // being read from — so it is the final address that has to still be a host we trust.
         var final = response.RequestMessage?.RequestUri ?? url;
-        if (!ArchiveHost(final)) throw new ProviderException("That book is not offered by the Archive.");
+        if (!trusted(final)) throw new ProviderException("That book is not offered by the Archive.");
         if (response.StatusCode != HttpStatusCode.OK)
             throw new ProviderException("The Archive answered " + (int)response.StatusCode + " for that book.");
         if (response.Content.Headers.ContentLength is > MaxBookBytes) throw new ProviderException("That book is too large to save.");
@@ -132,7 +151,7 @@ public sealed record EbookSaveResponse(string File, string Format, long Bytes, i
 [ApiController]
 [Authorize(Policy = Policies.RequiresElevation)]
 [Route("StreamFin/Ebooks")]
-public sealed class EbooksController(BookSaver saver, InternetArchiveCatalog archive, OpenLibraryCatalog openLibrary, ILibraryManager library) : ControllerBase
+public sealed class EbooksController(BookSaver saver, InternetArchiveCatalog archive, OpenLibraryCatalog openLibrary, OpdsCatalog opds, ILibraryManager library) : ControllerBase
 {
     // Search the configured book sources in order, so the settings' source list decides which
     // catalogues are asked and in what order. A source that fails is left out rather than failing
@@ -150,21 +169,24 @@ public sealed class EbooksController(BookSaver saver, InternetArchiveCatalog arc
     {
         if (string.IsNullOrWhiteSpace(q)) return BadRequest("A search term is required.");
         var settings = Plugin.Instance?.Configuration;
-        var wanted = Plugin.Ordered(settings?.BookSourceOrder, OpenLibraryCatalog.SourceId, InternetArchiveCatalog.SourceId);
+        var wanted = Plugin.Ordered(settings?.BookSourceOrder, OpenLibraryCatalog.SourceId, InternetArchiveCatalog.SourceId, OpdsCatalog.SourceId);
         var perSource = new List<IReadOnlyList<EbookRecord>>();
         foreach (var id in wanted)
         {
-            try
+            if (id == OpdsCatalog.SourceId)
             {
-                perSource.Add(id switch
-                {
-                    OpenLibraryCatalog.SourceId => await openLibrary.SearchAsync(q, limit, ct),
-                    InternetArchiveCatalog.SourceId => await archive.SearchEbooksAsync(q, limit, ct),
-                    _ => [],
-                });
+                // Every configured catalog is a group of its own, so two addresses interleave with
+                // each other exactly as two sources do instead of the first filling the page.
+                foreach (var address in settings?.OpdsAddresses ?? [])
+                    perSource.Add(await AskAsync(() => opds.SearchAsync(address, q, limit, ct)));
+                continue;
             }
-            catch (ProviderException) { }
-            catch (HttpRequestException) { }
+            perSource.Add(await AskAsync(() => id switch
+            {
+                OpenLibraryCatalog.SourceId => openLibrary.SearchAsync(q, limit, ct),
+                InternetArchiveCatalog.SourceId => archive.SearchEbooksAsync(q, limit, ct),
+                _ => Task.FromResult<IReadOnlyList<EbookRecord>>([]),
+            }));
         }
         var found = new List<EbookRecord>();
         // Terminates when no catalogue has a row at this position any more, which is the only way
@@ -186,6 +208,16 @@ public sealed class EbooksController(BookSaver saver, InternetArchiveCatalog arc
         return Ok(found);
     }
 
+    // One catalogue being unreachable is not a failed search: the rest still answer, which is the
+    // only reason a broken feed can be left in the list without emptying every result.
+    private static async Task<IReadOnlyList<EbookRecord>> AskAsync(Func<Task<IReadOnlyList<EbookRecord>>> ask)
+    {
+        try { return await ask(); }
+        catch (ProviderException) { return []; }
+        catch (HttpRequestException) { return []; }
+        catch (OperationCanceledException) { return []; }
+    }
+
     [HttpPost("Save")]
     public async Task<ActionResult<EbookSaveResponse>> Save([FromQuery] string id, CancellationToken ct)
     {
@@ -199,6 +231,41 @@ public sealed class EbooksController(BookSaver saver, InternetArchiveCatalog arc
             var path = await saver.SaveAsync(book, files[0], folder, ct);
             if (!library.IsScanRunning) library.QueueLibraryScan();
             return Ok(new EbookSaveResponse(Path.GetFileName(path), files[0].Format, new FileInfo(path).Length, files.Count));
+        }
+        catch (ProviderException ex) { return BadRequest(ex.Message); }
+    }
+
+    // Saving a book whose bytes sit on the catalog's own address instead of the Archive. The origin
+    // travels with the request because it is what makes a host trustworthy: it is the address the
+    // operator wrote into the settings, and the file is only followed while it stays on that
+    // address's own host — a feed cannot name somewhere else and have us fetch it. The name comes
+    // from the title the catalog reported, run through the same path rule as every other book.
+    [HttpPost("SaveUrl")]
+    public async Task<ActionResult<EbookSaveResponse>> SaveUrl([FromQuery] string url, [FromQuery] string origin, [FromQuery] string title, [FromQuery] int? year, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(origin))
+            return BadRequest("A file address and the catalog it came from are required.");
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var target)) return BadRequest("That is not a file address.");
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out _)) return BadRequest("That catalog address is not a URL.");
+        var format = Path.GetExtension(target.AbsolutePath).ToLowerInvariant() switch
+        {
+            ".epub" => "EPUB",
+            ".pdf" => "PDF",
+            _ => null,
+        };
+        if (format is null) return BadRequest("That link is not a book file a Books library could read.");
+        if (BookSaver.Folder is not { } folder) return BadRequest("No ebook folder is set.");
+
+        // The record exists only to name the file. The bytes come from the address, never the
+        // caller, and the caller cannot choose where they land.
+        var book = new EbookRecord(Id: target.ToString(), Source: OpdsCatalog.SourceId,
+            Title: string.IsNullOrWhiteSpace(title) ? "Book" : title, Authors: [], Image: null,
+            Description: null, Year: year, ArchiveIds: [], Files: [], Origin: origin);
+        try
+        {
+            var path = await saver.SaveUrlAsync(book, new EbookFile(format, target, null), folder, origin, ct);
+            if (!library.IsScanRunning) library.QueueLibraryScan();
+            return Ok(new EbookSaveResponse(Path.GetFileName(path), format, new FileInfo(path).Length, 1));
         }
         catch (ProviderException ex) { return BadRequest(ex.Message); }
     }

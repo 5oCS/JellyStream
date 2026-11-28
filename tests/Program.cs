@@ -1462,6 +1462,76 @@ if (args.Contains("--hls-live"))
     var showLive = await flix.ResolveAsync(new Film(2190, FilmKind.Tv, "South Park", 1997, "", null, null, false), 1, 1, default);
     Check(!showLive[0].Hls || await FirstSegmentAsync(showLive[0], "FlixHQ South Park S01E01") >= 0, "live FlixHQ episode resolves");
 }
+// Path D: OPDS. Both formats, with bodies shaped exactly like the ones captured from Open Library
+// and Standard Ebooks today — the Archive identifier folded into an archive.org alternate link, and
+// the plain enclosure relation an Atom feed uses where OPDS spells out an acquisition relation.
+var opdsManifest = OpdsCatalog.Parse("""
+{"metadata":{"title":"Open Library"},"publications":[
+ {"metadata":{"title":"Dune","author":[{"name":"Frank Herbert"}],"description":"A study."},
+  "links":[{"rel":"alternate","href":"https://openlibrary.org/works/OL123W"},
+           {"rel":"self","href":"https://openlibrary.org/opds/works/OL123W"},
+           {"href":"https://archive.org/services/loans/loan/?action=webpub&identifier=dune00fran&opds=1"}]},
+ {"metadata":{"title":"A Lookalike","author":[{"name":"Nobody"}]},
+  "links":[{"href":"https://archive.org.evil.example/loan/?identifier=evil0001"}]}]}
+""", "https://openlibrary.org/opds/", 10);
+Check(opdsManifest.Count == 2, "an OPDS 2.0 feed yields one row per publication");
+Check(opdsManifest[0].Title == "Dune" && opdsManifest[0].Authors.SequenceEqual(["Frank Herbert"]), "title and author are read from the manifest");
+Check(opdsManifest[0].ArchiveIds.SequenceEqual(["dune00fran"]), "the Archive identifier is folded out of the alternate link");
+Check(opdsManifest[0].Origin == "https://openlibrary.org/opds/", "the row remembers which address served it");
+Check(opdsManifest[0].Files.Count == 0, "a manifest with no acquisition link claims no file");
+Check(opdsManifest[1].ArchiveIds.Count == 0, "a lookalike host names no identifier — only the Archive counts");
+
+var opdsAtom = OpdsCatalog.Parse("""
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+ <title>Standard Ebooks: new releases</title>
+ <entry>
+  <id>https://standardebooks.org/ebooks/italo-svevo/confessions-of-zeno</id>
+  <title>Confessions of Zeno</title>
+  <author><name>Italo Svevo</name></author>
+  <published>2026-11-20T17:17:24Z</published>
+  <link rel="alternate" type="text/html" href="https://standardebooks.org/ebooks/italo-svevo/confessions-of-zeno"/>
+  <link rel="enclosure" type="application/epub+zip" length="875588" href="https://standardebooks.org/downloads/italo-svevo_confessions-of-zeno.epub?source=feed"/>
+ </entry>
+ <entry>
+  <id>https://standardebooks.org/ebooks/nobody/no-file</id>
+  <title>No File Here</title>
+  <author><name>Nobody</name></author>
+  <link rel="alternate" type="text/html" href="https://standardebooks.org/ebooks/nobody/no-file"/>
+ </entry>
+</feed>
+""", "https://standardebooks.org/feeds/atom/new-releases", 10);
+Check(opdsAtom.Count == 2, "an Atom feed yields one row per entry");
+Check(opdsAtom[0].Files.Count == 1 && opdsAtom[0].Files[0].Format == "EPUB", "an enclosure is read as a downloadable EPUB");
+Check(opdsAtom[0].Files[0].Url.Scheme == Uri.UriSchemeHttps, "the file link is https");
+Check(opdsAtom[0].Year == 2026, "the publication year is read from the entry");
+Check(opdsAtom[0].Origin == "https://standardebooks.org/feeds/atom/new-releases", "Atom rows remember their address too");
+Check(opdsAtom[1].Files.Count == 0, "an entry with no acquisition link claims no file");
+
+// Neither format is declared reliably, so the body decides — and a body that is neither has to
+// yield nothing rather than throw or guess at rows it cannot read.
+Check(OpdsCatalog.Parse("<html><body>401 Unauthorized</body></html>", "https://x.example/", 10).Count == 0, "an HTML error page yields no rows");
+Check(OpdsCatalog.Parse("{not json", "https://x.example/", 10).Count == 0, "a broken manifest yields no rows");
+Check(OpdsCatalog.Parse(string.Empty, "https://x.example/", 10).Count == 0, "an empty body yields no rows");
+
+// The host rule for a direct file link: only the address the operator configured is followed, so
+// a feed cannot name somewhere else and have the plugin fetch it.
+var opdsFolder = Path.Combine(Path.GetTempPath(), "jellystream-opds-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(opdsFolder);
+var opdsSaver = new BookSaver(new SafeHttp(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BookSaver>.Instance);
+var opdsOrigin = "https://standardebooks.org/feeds/atom/new-releases";
+await RejectAsync(() => opdsSaver.SaveUrlAsync(
+    new EbookRecord("u", OpdsCatalog.SourceId, "Dune", [], null, null, null, [], [], opdsOrigin),
+    new EbookFile("EPUB", new Uri("https://evil.example/dune.epub"), null), opdsFolder, opdsOrigin, default),
+    "a file off the catalog's own address is refused");
+await RejectAsync(() => opdsSaver.SaveUrlAsync(
+    new EbookRecord("u", OpdsCatalog.SourceId, "Dune", [], null, null, null, [], [], opdsOrigin),
+    new EbookFile("EPUB", new Uri("http://standardebooks.org/dune.epub"), null), opdsFolder, opdsOrigin, default),
+    "a plain http file on the right host is refused too");
+await RejectAsync(() => opdsSaver.SaveUrlAsync(
+    new EbookRecord("u", OpdsCatalog.SourceId, "Dune", [], null, null, null, [], [], null!),
+    new EbookFile("EPUB", new Uri("https://standardebooks.org/dune.epub"), null), opdsFolder, null!, default),
+    "a file with no catalog address to trust is refused");
 Console.WriteLine($"{count} checks passed.");
 
 sealed class SiteFake(string id, IReadOnlyList<SourceTitle> titles, IReadOnlyList<SourceEpisode> episodes, Func<string, IReadOnlyList<ResolvedVideo>> resolve) : IAnimeSource

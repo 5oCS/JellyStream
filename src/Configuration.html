@@ -228,6 +228,9 @@
           <div class="fieldDescription">An Archive identifier is downloaded into the ebook folder as "Title (Year).epub", which is the filename Jellyfin's own BookFileNameParser reads the title and year from. Jellyfin then reads the book's own metadata and cover and tracks the reading position — no reader of ours is involved. The folder has to be one you have added as a Books library, or the file will sit there unseen.</div></div>
         <button is="emby-button" type="button" id="bookSave" class="raised block"><span>Save to library</span></button>
         <p id="bookSaveStatus" role="status"></p>
+        <div class="inputContainer"><label class="inputLabel" for="opdsAddresses">OPDS catalogs</label>
+          <textarea is="emby-input" id="opdsAddresses" rows="4" spellcheck="false" autocomplete="off" placeholder="https://openlibrary.org/opds/"></textarea>
+          <div class="fieldDescription">One address per line, as many as you like. Each is searched alongside the built-in catalogues, and a book from one of these is only ever downloaded from that address's own host — a feed cannot name somewhere else and have the plugin fetch it. A catalog has to be able to search itself; one that only publishes a fixed list will not return matches for a term.</div></div>
         <div class="inputContainer"><label class="inputLabel" for="bookSearch">Find books</label>
           <input is="emby-input" type="text" id="bookSearch" autocomplete="off" spellcheck="false" placeholder="dune">
           <div class="fieldDescription">Asks the configured book catalogues in order and lists what each returned. Every row keeps its own source, and saving one passes its Archive identifier to the download above — Open Library supplies the metadata and names the Archive items that carry the bytes, which is how Anna's Archive splits the job too. A catalogue that cannot be reached is skipped rather than failing the search.</div></div>
@@ -326,6 +329,7 @@
             page.querySelector('#podcastYouTube').checked = config.PodcastYouTube === true;
             page.querySelector('#podcastFeeds').value = (config.PodcastFeeds || []).join('\n');
             page.querySelector('#bookFolder').value = config.BookFolder || '';
+            page.querySelector('#opdsAddresses').value = (config.OpdsAddresses || []).join('\n');
             applyOrder(page.querySelector('#playOrder'), config.MusicPlayOrder);
             applyOrder(page.querySelector('#searchOrder'), config.MusicSearchOrder);
             applyOrder(page.querySelector('#filmOrder'), config.FilmSourceOrder);
@@ -404,6 +408,7 @@
           config.PodcastYouTube = page.querySelector('#podcastYouTube').checked;
           config.PodcastFeeds = page.querySelector('#podcastFeeds').value.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
           config.BookFolder = page.querySelector('#bookFolder').value.trim();
+          config.OpdsAddresses = page.querySelector('#opdsAddresses').value.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
           // Switching YouTube off is how to keep to FLAC now; songs already kept from it still play.
           config.MusicAllowLossy = true;
           config.MusicPlayOrder = Array.from(page.querySelector('#playOrder').children, item => item.dataset.source);
@@ -581,30 +586,38 @@
           detail.textContent = ((book.Authors || []).join(', ') || 'Unknown author') + ' — ' + (book.Source || 'catalogue');
           row.appendChild(heading);
           row.appendChild(detail);
-          // Both catalogues put the Archive identifier that carries the bytes in the same place:
-          // Open Library supplies metadata and names the items, the Archive supplies its own.
+          // Two ways a row can be saveable. The Archive identifier is what Open Library and the
+          // Archive both put in the same place; a direct file link is what an OPDS catalog offers
+          // instead, and it is only ever followed on the host of the address the catalog came from.
           const archive = (book.ArchiveIds || [])[0] || '';
-          if (!archive) {
+          const direct = (book.Files || [])[0] || null;
+          const target = archive || (direct && direct.Url) || '';
+          if (!target) {
             const note = document.createElement('div');
             note.className = 'fieldDescription';
-            note.textContent = 'No Archive copy is listed for this row, so there are no bytes to save.';
+            note.textContent = 'No copy with bytes is listed for this row, so there is nothing to save.';
             row.appendChild(note);
             return row;
           }
           const save = document.createElement('button');
           save.type = 'button';
           save.className = 'raised';
-          save.textContent = 'Save to library';
+          save.textContent = archive ? 'Save to library' : 'Download and save';
           save.disabled = !loaded;
           save.addEventListener('click', async function () {
             const status = page.querySelector('#bookSaveStatus');
             save.disabled = true;
-            status.textContent = 'Downloading from the Archive…';
+            status.textContent = archive ? 'Downloading from the Archive…' : 'Downloading from the catalog…';
             try {
-              const result = await ApiClient.ajax({type: 'POST', url: ApiClient.getUrl('StreamFin/Ebooks/Save', {id: archive}), dataType: 'json'});
+              const call = archive
+                ? ApiClient.getUrl('StreamFin/Ebooks/Save', {id: archive})
+                : ApiClient.getUrl('StreamFin/Ebooks/SaveUrl', {url: direct.Url, origin: book.Origin || '', title: book.Title || '', year: book.Year || ''});
+              const result = await ApiClient.ajax({type: 'POST', url: call, dataType: 'json'});
               status.textContent = 'Saved ' + result.File + ' (' + result.Format + ', ' + Math.round(result.Bytes / 1024) + ' KB). Jellyfin adds it to the Books library on its next scan.';
             } catch {
-              status.textContent = 'Could not save that book. Check that an ebook folder is set and that the Archive has a readable copy.';
+              status.textContent = archive
+                ? 'Could not save that book. Check that an ebook folder is set and that the Archive has a readable copy.'
+                : 'Could not download that file. The catalog has to be reachable from this server, and the file has to sit on the catalog\u2019s own address.';
             } finally { save.disabled = !loaded; }
           });
           row.appendChild(save);

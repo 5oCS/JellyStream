@@ -76,6 +76,11 @@ public sealed class Configuration : BasePluginConfiguration
     // Which book catalogues are searched for a term, and in what order. The order is the whole
     // point: an operator who prefers one catalogue puts it first and gets its rows first.
     public string[] BookSourceOrder { get; set; } = [];
+
+    // OPDS catalogs, one address per line in the settings. Each is a source in its own right, so
+    // an operator can add any catalog they can reach instead of waiting for one of us to name it —
+    // which is the whole reason Path D exists.
+    public string[] OpdsAddresses { get; set; } = [];
     // Starred albums are saved here as FLAC files for a normal music library; empty turns it off.
     public string MusicLibraryFolder { get; set; } = "";
     // Optional: Last.fm's similar artists when ListenBrainz has none.
