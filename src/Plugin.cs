@@ -72,6 +72,10 @@ public sealed class Configuration : BasePluginConfiguration
     // A folder of EPUBs and PDFs indexed as books; empty turns it off. This is the offline shelf:
     // nothing is fetched, and the folder is only ever read.
     public string BookFolder { get; set; } = "";
+
+    // Which book catalogues are searched for a term, and in what order. The order is the whole
+    // point: an operator who prefers one catalogue puts it first and gets its rows first.
+    public string[] BookSourceOrder { get; set; } = [];
     // Starred albums are saved here as FLAC files for a normal music library; empty turns it off.
     public string MusicLibraryFolder { get; set; } = "";
     // Optional: Last.fm's similar artists when ListenBrainz has none.

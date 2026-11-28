@@ -228,6 +228,12 @@
           <div class="fieldDescription">An Archive identifier is downloaded into the ebook folder as "Title (Year).epub", which is the filename Jellyfin's own BookFileNameParser reads the title and year from. Jellyfin then reads the book's own metadata and cover and tracks the reading position — no reader of ours is involved. The folder has to be one you have added as a Books library, or the file will sit there unseen.</div></div>
         <button is="emby-button" type="button" id="bookSave" class="raised block"><span>Save to library</span></button>
         <p id="bookSaveStatus" role="status"></p>
+        <div class="inputContainer"><label class="inputLabel" for="bookSearch">Find books</label>
+          <input is="emby-input" type="text" id="bookSearch" autocomplete="off" spellcheck="false" placeholder="dune">
+          <div class="fieldDescription">Asks the configured book catalogues in order and lists what each returned. Every row keeps its own source, and saving one passes its Archive identifier to the download above — Open Library supplies the metadata and names the Archive items that carry the bytes, which is how Anna's Archive splits the job too. A catalogue that cannot be reached is skipped rather than failing the search.</div></div>
+        <button is="emby-button" type="button" id="bookSearchGo" class="raised block"><span>Search</span></button>
+        <div id="bookResults"></div>
+        <p id="bookSearchStatus" role="status"></p>
       </div>
 
       <p id="jellystreamStatus" role="status">Loading settings…</p>
@@ -560,6 +566,67 @@
             status.textContent = 'Saved ' + result.File + ' (' + result.Format + ', ' + Math.round(result.Bytes / 1024) + ' KB). Jellyfin adds it to the Books library on its next scan.';
           } catch {
             status.textContent = 'Could not save that book. Check the identifier, and that an ebook folder is set.';
+          } finally { button.disabled = !loaded; }
+        });
+        // A catalogue row becomes one element. Titles and author names come from outside servers, so
+        // they are set as text and never as markup — a title containing a tag is just a title.
+        function bookRow(book) {
+          const row = document.createElement('div');
+          row.className = 'inputContainer';
+          const heading = document.createElement('div');
+          heading.className = 'inputLabel';
+          heading.textContent = (book.Title || book.Id) + (book.Year ? ' (' + book.Year + ')' : '');
+          const detail = document.createElement('div');
+          detail.className = 'fieldDescription';
+          detail.textContent = ((book.Authors || []).join(', ') || 'Unknown author') + ' — ' + (book.Source || 'catalogue');
+          row.appendChild(heading);
+          row.appendChild(detail);
+          // Both catalogues put the Archive identifier that carries the bytes in the same place:
+          // Open Library supplies metadata and names the items, the Archive supplies its own.
+          const archive = (book.ArchiveIds || [])[0] || '';
+          if (!archive) {
+            const note = document.createElement('div');
+            note.className = 'fieldDescription';
+            note.textContent = 'No Archive copy is listed for this row, so there are no bytes to save.';
+            row.appendChild(note);
+            return row;
+          }
+          const save = document.createElement('button');
+          save.type = 'button';
+          save.className = 'raised';
+          save.textContent = 'Save to library';
+          save.disabled = !loaded;
+          save.addEventListener('click', async function () {
+            const status = page.querySelector('#bookSaveStatus');
+            save.disabled = true;
+            status.textContent = 'Downloading from the Archive…';
+            try {
+              const result = await ApiClient.ajax({type: 'POST', url: ApiClient.getUrl('StreamFin/Ebooks/Save', {id: archive}), dataType: 'json'});
+              status.textContent = 'Saved ' + result.File + ' (' + result.Format + ', ' + Math.round(result.Bytes / 1024) + ' KB). Jellyfin adds it to the Books library on its next scan.';
+            } catch {
+              status.textContent = 'Could not save that book. Check that an ebook folder is set and that the Archive has a readable copy.';
+            } finally { save.disabled = !loaded; }
+          });
+          row.appendChild(save);
+          return row;
+        }
+        page.querySelector('#bookSearchGo').addEventListener('click', async function () {
+          if (!loaded) return;
+          const button = page.querySelector('#bookSearchGo');
+          const status = page.querySelector('#bookSearchStatus');
+          const results = page.querySelector('#bookResults');
+          const term = page.querySelector('#bookSearch').value.trim();
+          if (!term) { status.textContent = 'Enter a title, an author or an ISBN first.'; return; }
+          button.disabled = true;
+          status.textContent = 'Searching…';
+          results.replaceChildren();
+          try {
+            const books = await ApiClient.ajax({type: 'GET', url: ApiClient.getUrl('StreamFin/Ebooks/Search', {q: term}), dataType: 'json'});
+            if (!books || !books.length) { status.textContent = 'Nothing found in the configured catalogues.'; return; }
+            status.textContent = books.length + (books.length === 1 ? ' book' : ' books') + ' found.';
+            books.forEach(book => results.appendChild(bookRow(book)));
+          } catch {
+            status.textContent = 'Could not search. Check the catalogues are reachable from this server.';
           } finally { button.disabled = !loaded; }
         });
         page.querySelectorAll('.jellystreamTab').forEach(tab => tab.addEventListener('click', function () {

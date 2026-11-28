@@ -132,8 +132,60 @@ public sealed record EbookSaveResponse(string File, string Format, long Bytes, i
 [ApiController]
 [Authorize(Policy = Policies.RequiresElevation)]
 [Route("StreamFin/Ebooks")]
-public sealed class EbooksController(BookSaver saver, InternetArchiveCatalog archive, ILibraryManager library) : ControllerBase
+public sealed class EbooksController(BookSaver saver, InternetArchiveCatalog archive, OpenLibraryCatalog openLibrary, ILibraryManager library) : ControllerBase
 {
+    // Search the configured book sources in order, so the settings' source list decides which
+    // catalogues are asked and in what order. A source that fails is left out rather than failing
+    // the search — the rule the podcast shelf follows, because one broken API must not empty it.
+    // Every row keeps its own Source, so a result from Open Library and one from the Archive are
+    // told apart without a second round trip.
+    //
+    // The rows are interleaved rather than concatenated: asking each catalogue for the page and
+    // then taking one row at a time in order means the order decides which row comes first without
+    // one catalogue filling the page before the next is asked at all. Concatenating would leave
+    // every source after the first unreachable in practice, since Open Library alone will return
+    // twenty-four Dunes.
+    [HttpGet("Search")]
+    public async Task<ActionResult<IReadOnlyList<EbookRecord>>> Search([FromQuery] string q, CancellationToken ct, [FromQuery] int limit = 24)
+    {
+        if (string.IsNullOrWhiteSpace(q)) return BadRequest("A search term is required.");
+        var settings = Plugin.Instance?.Configuration;
+        var wanted = Plugin.Ordered(settings?.BookSourceOrder, OpenLibraryCatalog.SourceId, InternetArchiveCatalog.SourceId);
+        var perSource = new List<IReadOnlyList<EbookRecord>>();
+        foreach (var id in wanted)
+        {
+            try
+            {
+                perSource.Add(id switch
+                {
+                    OpenLibraryCatalog.SourceId => await openLibrary.SearchAsync(q, limit, ct),
+                    InternetArchiveCatalog.SourceId => await archive.SearchEbooksAsync(q, limit, ct),
+                    _ => [],
+                });
+            }
+            catch (ProviderException) { }
+            catch (HttpRequestException) { }
+        }
+        var found = new List<EbookRecord>();
+        // Terminates when no catalogue has a row at this position any more, which is the only way
+        // out once every source is exhausted.
+        for (var index = 0; found.Count < limit; index++)
+        {
+            var any = false;
+            foreach (var hits in perSource)
+            {
+                if (index >= hits.Count) continue;
+                any = true;
+                var hit = hits[index];
+                if (found.Count >= limit) break;
+                // The catalogues can return the same work; one row per id.
+                if (!found.Any(other => other.Id == hit.Id)) found.Add(hit);
+            }
+            if (!any) break;
+        }
+        return Ok(found);
+    }
+
     [HttpPost("Save")]
     public async Task<ActionResult<EbookSaveResponse>> Save([FromQuery] string id, CancellationToken ct)
     {
